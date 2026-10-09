@@ -1,9 +1,11 @@
 import streamlit as st
 import pandas as pd
 import joblib
+from pathlib import Path
 
 # Load the saved model
-loaded = joblib.load("models/credit_risk_model.pkl")
+MODEL_PATH = Path(__file__).parent / "models" / "credit_risk_model.pkl"
+loaded = joblib.load(MODEL_PATH)
 
 model = loaded["model"]
 threshold = loaded["threshold"]
