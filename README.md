@@ -638,7 +638,16 @@ Potential improvements include:
 
 Any future tuning should preserve a final untouched test set for unbiased evaluation.
 
----
+## 📸 Project Screenshots
+
+### 1. Application Interface:
+[Application Interface](screenshots/app_interface.png)
+
+### 2. Credit Risk Prediction Result :
+[Prediction Result](screenshots/prediction_result.png)
+
+### 3. Top 10 Credit Risk Features:
+[Feature Coefficients](screenshots/feature_importance.png)
 
 ## 📚 17. References
 
