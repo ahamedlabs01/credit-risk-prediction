@@ -197,35 +197,42 @@ The application follows this workflow:
 ```text
 credit-risk-prediction/
 │
-├── app.py
+├── app.py                      # Interactive Streamlit Web Application (CreditIQ)
 │
 ├── data/
-│   └── german.data
+│   └── german.data             # German Credit Dataset (UCI Machine Learning Repository)
 │
 ├── notebooks/
-│   └── credit_risk_analysis.ipynb
+│   └── credit_risk_analysis.ipynb # Full EDA, preprocessing, model development & threshold analysis
 │
 ├── models/
-│   └── credit_risk_model.pkl
+│   └── credit_risk_model.pkl   # Serialized end-to-end trained Scikit-learn Pipeline
 │
 ├── src/
+│   └── train.py                # Standalone reproducible training and validation pipeline
 │
 ├── screenshots/
+│   ├── app_interface.png       # Modern 3-column CreditIQ web UI screenshot
+│   ├── prediction_result.png   # Risk evaluation report & spectrum gauge screenshot
+│   └── feature_importance.png  # Top 10 predictive feature weights plot
 │
-└── README.md
+├── requirements.txt            # Python dependencies
+├── .gitignore                  # Git tracking rules
+└── README.md                   # Comprehensive project documentation
 ```
 
 ### Directory Description
 
 | File or Directory | Purpose |
 |---|---|
-| `app.py` | Streamlit web application |
-| `data/` | Dataset used in the project |
-| `notebooks/` | Data analysis, experiments, and model development |
-| `models/` | Serialized trained model |
-| `src/` | Location for reusable Python modules |
-| `screenshots/` | Location for application and analysis screenshots |
-| `README.md` | Project documentation |
+| `app.py` | Modern Streamlit web application (CreditIQ) with 3-column inputs, preset profiles, and real-time risk assessment |
+| `data/` | Dataset directory containing the raw `german.data` file |
+| `notebooks/` | Jupyter Notebook containing data exploration, visualization, feature engineering, and model training |
+| `models/` | Serialized trained Scikit-learn Pipeline (`credit_risk_model.pkl`) containing preprocessing, scaling, and classification |
+| `src/` | Reusable Python modules and standalone training pipeline (`src/train.py`) |
+| `screenshots/` | Interface and evaluation result screenshots embedded in documentation |
+| `requirements.txt` | Complete list of pinned dependencies for easy replication |
+| `README.md` | Comprehensive project documentation and guides |
 
 ---
 
@@ -477,26 +484,34 @@ These coefficients indicate model associations, not causal relationships.
 
 ---
 
-## 🌐 12. Streamlit Web Application
+## 🌐 12. Streamlit Web Application (CreditIQ)
 
-The project includes an interactive application implemented in `app.py`.
+The project includes an interactive web application implemented in `app.py`.
 
 ### Application Features
 
-- Applicant information form
-- Numerical input controls
-- Categorical dropdown menus
-- Credit-risk classification
-- Estimated Bad Credit probability
-- Threshold-based prediction
-- Educational-use disclaimer
+- **Executive Fintech Design:** Modern dark-slate theme with glassmorphism cards and Inter typography.
+- **Structured 3-Column Inputs:** 
+  1. *Loan & Financial Status* (Duration slider, Credit Amount input, Checking balance, Savings, Purpose, Installment rate).
+  2. *Personal & Employment* (Age slider, Employment tenure, Job category, Personal status, Dependents, Foreign worker status).
+  3. *Assets, History & Collateral* (Credit history, Housing, Property, Other debtors/guarantors, Other plans, Existing credits).
+- **Human-Readable Dropdowns:** All German Credit codes (`A11`, `A12`, etc.) are mapped to intuitive labels while preserving backend numerical/categorical encoding.
+- **One-Click Presets (Sidebar):** Test profiles with pre-configured parameters:
+  - 🌟 **Prime (Low Risk):** Low default probability applicant.
+  - ⚠️ **High Risk Profile:** Elevated default probability applicant.
+- **Dynamic Decision Policy:** Real-time threshold adjustment slider (default `30%`) with automated cost-matrix optimization notes.
+- **Credit Risk Evaluation Report:** 
+  - Dynamic status cards: 🟢 **Approved • Prime Eligible** vs. 🔴 **Risk Alert • Flagged**.
+  - Metric cards: Default Probability, Policy Cutoff Threshold, Risk Rating Tier (`Tier 1`, `Tier 2`, or `Tier 3`), and Requested Credit Amount.
+  - **Default Risk Spectrum Gauge:** Progress bar showing the applicant's exact standing on the risk curve.
+- **Educational-Use Disclaimer:** Transparent risk communication for non-commercial use.
 
 ### Running the Application
 
 From the project root directory, execute:
 
 ```bash
-python -m streamlit run app.py
+streamlit run app.py
 ```
 
 Streamlit displays a local URL in the terminal, typically:
@@ -507,15 +522,6 @@ http://localhost:8501
 
 Open that address in a browser to access the application.
 
-### Example Prediction
-
-During application testing, one set of entered applicant details produced:
-
-- Predicted category: Bad Credit
-- Estimated Bad Credit probability: 96.1%
-
-This is an example from the tested application, not a general performance metric or a guarantee of future repayment behavior.
-
 ---
 
 ## ⚙️ 13. Installation and Setup
@@ -524,20 +530,16 @@ This is an example from the tested application, not a general performance metric
 
 Install the following software:
 
-- Python
+- Python 3.9+
 - Visual Studio Code or another Python editor
-- Git, if you intend to clone the repository
+- Git
 
 ### Step 1: Clone the Repository
-
-After publishing the repository to GitHub:
 
 ```bash
 git clone <YOUR_GITHUB_REPOSITORY_URL>
 cd credit-risk-prediction
 ```
-
-Replace the placeholder with your actual repository URL.
 
 ### Step 2: Create a Virtual Environment
 
@@ -545,27 +547,39 @@ Replace the placeholder with your actual repository URL.
 python -m venv .venv
 ```
 
-Activate it on Windows Command Prompt:
-
-```bat
-.venv\Scripts\activate.bat
-```
+Activate the virtual environment:
+- **Windows (PowerShell):**
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+- **Windows (Command Prompt):**
+  ```bat
+  .venv\Scripts\activate.bat
+  ```
+- **Linux / macOS:**
+  ```bash
+  source .venv/bin/activate
+  ```
 
 ### Step 3: Install Dependencies
 
 ```bash
-python -m pip install pandas numpy matplotlib seaborn scikit-learn streamlit joblib jupyter
+pip install -r requirements.txt
 ```
 
-### Step 4: Start the Application
+### Step 4: Retrain the Pipeline (Optional)
+
+To retrain the complete end-to-end Scikit-Learn pipeline and re-export `models/credit_risk_model.pkl`:
 
 ```bash
-python -m streamlit run app.py
+python src/train.py
 ```
 
-### Step 5: Open the Local URL
+### Step 5: Launch the Web Application
 
-Use the URL displayed in the terminal to access the application.
+```bash
+streamlit run app.py
+```
 
 ---
 
@@ -640,14 +654,14 @@ Any future tuning should preserve a final untouched test set for unbiased evalua
 
 ## 📸 Project Screenshots
 
-### 1. Application Interface:
-[Application Interface](screenshots/app_interface.png)
+### 1. Application Interface (CreditIQ 3-Column Layout & Presets)
+![Application Interface](screenshots/app_interface.png)
 
-### 2. Credit Risk Prediction Result :
-[Prediction Result](screenshots/prediction_result.png)
+### 2. Credit Risk Evaluation Report & Spectrum Gauge
+![Prediction Result](screenshots/prediction_result.png)
 
-### 3. Top 10 Credit Risk Features:
-[Feature Coefficients](screenshots/feature_importance.png)
+### 3. Top Predictive Credit Risk Features
+![Feature Coefficients](screenshots/feature_importance.png)
 
 ## 📚 17. References
 
