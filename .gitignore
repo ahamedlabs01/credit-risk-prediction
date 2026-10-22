@@ -6,3 +6,4 @@ __pycache__/
 .env
 models/*
 !models/credit_risk_model.pkl
+scratch/

@@ -144,51 +144,55 @@ https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data
 
 ## 🏗️ 6. Project Architecture
 
-The application follows this workflow:
+The application follows this end-to-end workflow:
 
-```text
+`	ext
                  German Credit Dataset
                            |
                            v
-                  Data Loading
-                           |
-                           v
-                 Data Quality Checks
+                  Data Loading & Validation
                            |
                            v
            Exploratory Data Analysis (EDA)
                            |
                            v
-              Train / Validation / Test
+         Stratified Train-Test Split (80/20)
                            |
                            v
                  Data Preprocessing
-             (One-Hot Encoding)
+        (ColumnTransformer: One-Hot & Scaling)
                            |
                            v
-                 Feature Scaling
+       Logistic Regression Pipeline Optimization
                            |
                            v
-                Logistic Regression
+       Probability Estimation & Threshold Tuning (0.3)
                            |
                            v
-               Probability Estimation
+       Automated Underwriting & Pricing Engine
+  ┌──────────────────────────────────────────────────┐
+  │ - Risk-Adjusted APR Calculation (Spread Pricing) │
+  │ - Max Safe Credit Limit Capacity Modeling        │
+  │ - Amortization Schedules & Debt-Service Burden   │
+  │ - Risk Covenants & Conditions Precedent          │
+  └──────────────────────────────────────────────────┘
                            |
                            v
-              Threshold Classification
+         CreditIQ Modern Streamlit Interface
+  ┌──────────────────────────────────────────────────┐
+  │ - Interactive 3-Column Applicant Evaluation Form │
+  │ - Real-Time Dynamic Risk Spectrum Gauge          │
+  │ - Side-by-Side Facility Amortization Comparison  │
+  └──────────────────────────────────────────────────┘
                            |
                            v
-                 Model Evaluation
-                           |
-                           v
-               Save Trained Pipeline
-                           |
-                           v
-                 Streamlit Interface
-                           |
-                           v
-              Credit Risk Prediction
-```
+     Executive Credit Assessment Memo & Audit Export
+  ┌──────────────────────────────────────────────────┐
+  │ - Printable PDF / HTML Credit Committee Memo     │
+  │ - Structured Audit Docket (JSON Export)          │
+  │ - Live In-App Document Preview & 1-Click Print   │
+  └──────────────────────────────────────────────────┘
+`
 
 ---
 
@@ -209,7 +213,8 @@ credit-risk-prediction/
 │   └── credit_risk_model.pkl   # Serialized end-to-end trained Scikit-learn Pipeline
 │
 ├── src/
-│   └── train.py                # Standalone reproducible training and validation pipeline
+│   ├── train.py                # Standalone reproducible training and validation pipeline
+│   └── underwriting.py         # Underwriting engine, risk-adjusted APR pricing, amortization & memo generation
 │
 ├── screenshots/
 │   ├── app_interface.png       # Modern 3-column CreditIQ web UI screenshot
@@ -225,11 +230,12 @@ credit-risk-prediction/
 
 | File or Directory | Purpose |
 |---|---|
-| `app.py` | Modern Streamlit web application (CreditIQ) with 3-column inputs, preset profiles, and real-time risk assessment |
+| `app.py` | Modern Streamlit web application (CreditIQ) with 3-column inputs, preset profiles, underwriting evaluation, and memo export hub |
+| `src/underwriting.py` | Underwriting & pricing engine: risk-adjusted APR spreads, max safe credit limits, amortization schedules, covenants, and HTML/JSON memo generators |
+| `src/train.py` | Standalone reproducible training, metric evaluation, cost-matrix optimization, and pipeline packaging |
 | `data/` | Dataset directory containing the raw `german.data` file |
 | `notebooks/` | Jupyter Notebook containing data exploration, visualization, feature engineering, and model training |
 | `models/` | Serialized trained Scikit-learn Pipeline (`credit_risk_model.pkl`) containing preprocessing, scaling, and classification |
-| `src/` | Reusable Python modules and standalone training pipeline (`src/train.py`) |
 | `screenshots/` | Interface and evaluation result screenshots embedded in documentation |
 | `requirements.txt` | Complete list of pinned dependencies for easy replication |
 | `README.md` | Comprehensive project documentation and guides |
@@ -501,9 +507,18 @@ The project includes an interactive web application implemented in `app.py`.
   - ⚠️ **High Risk Profile:** Elevated default probability applicant.
 - **Dynamic Decision Policy:** Real-time threshold adjustment slider (default `30%`) with automated cost-matrix optimization notes.
 - **Credit Risk Evaluation Report:** 
-  - Dynamic status cards: 🟢 **Approved • Prime Eligible** vs. 🔴 **Risk Alert • Flagged**.
-  - Metric cards: Default Probability, Policy Cutoff Threshold, Risk Rating Tier (`Tier 1`, `Tier 2`, or `Tier 3`), and Requested Credit Amount.
+  - Dynamic status cards: 🟢 **Approved • Prime Eligible**, 🟡 **Conditionally Approved**, vs. 🔴 **Risk Alert • Flagged**.
+  - Metric cards: Default Probability, Policy Cutoff Threshold, Credit Rating Grade (`AAA` down to `CCC`), and Requested Credit Amount.
   - **Default Risk Spectrum Gauge:** Progress bar showing the applicant's exact standing on the risk curve.
+- **Automated Underwriting & Loan Terms Engine (`src/underwriting.py`):**
+  - **Risk-Adjusted Interest Rate (APR):** Benchmarked against prime rates (5.50%) with dynamic risk premiums based on default probability, property collateral, and savings cushions.
+  - **Maximum Safe Credit Limit:** Capacity-adjusted debt sizing evaluating collateral, liquid reserves, and disposable income to prevent over-leverage.
+  - **Amortization Comparison Table:** Side-by-side breakdown of Requested vs. Recommended Financing (principal, maturity, APR, monthly payment, total interest, and debt service ratio).
+  - **Underwriting Covenants & Conditions Precedent:** Automated stipulations (guarantor requirements, tenor curtailment, income verification, and overdraft clearance).
+- **Executive Credit Assessment Memo & Audit Export:**
+  - **Printable HTML / PDF Memorandum:** Formal Credit Committee Memorandum with docket reference ID (`CR-YYYYMM-XXXXXX`), timestamps, signatures block, and `@media print` layout.
+  - **Audit Docket (JSON):** Complete machine-readable audit trail for core banking integration.
+  - **In-App Interactive Preview:** Live embedded document viewer with 1-click browser print integration.
 - **Educational-Use Disclaimer:** Transparent risk communication for non-commercial use.
 
 ### Running the Application
@@ -537,7 +552,7 @@ Install the following software:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/ahamedlabs01/credit-risk-prediction.git
 cd credit-risk-prediction
 ```
 
@@ -585,23 +600,20 @@ streamlit run app.py
 
 ## 🧪 14. Testing
 
-The following checks were completed during development:
+The following checks and validations were completed during development:
 
-- Dataset loading
-- Missing-value and duplicate checks
-- Feature preprocessing
-- Model training
-- Classification evaluation
-- Threshold comparison
-- Feature coefficient visualization
-- Model serialization
-- Model loading
-- Streamlit application launch
-- Prediction generation through the web interface
-
-The application successfully generated a prediction during manual testing.
-
-A comprehensive automated test suite has not yet been documented.
+- **Data Pipeline:** Dataset loading, schema validation, zero missing-value / duplicate checks.
+- **Model Training:** Stratified train-test split, `ColumnTransformer` (One-Hot & Scaling), Logistic Regression fitting.
+- **Policy Tuning:** Threshold comparison (0.1 to 0.9) optimized for 5:1 misclassification cost matrix (30% decision threshold).
+- **Underwriting Engine Validation:**
+  - Risk-adjusted APR pricing calculation verified across Prime (4.95%) and High-Risk (23.95%) profiles.
+  - Maximum safe credit limit sizing based on collateral, liquid reserves, and debt-service capacity.
+  - Loan amortization schedules (requested vs underwriting offer) verified for mathematical correctness.
+  - Automated covenant generation tested for condition-precedent triggers (guarantor, tenor, collateral).
+- **Reporting & Export Hub Validation:**
+  - Executive Credit Assessment Memorandum HTML generation with `@media print` layout and 1-click PDF print trigger.
+  - Audit Docket JSON serialization with complete application audit trail.
+- **Application Validation:** Streamlit application launch, 3-column input rendering, preset loading, and session-state persistence verified under headless test execution.
 
 ---
 

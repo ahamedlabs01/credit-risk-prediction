@@ -1,7 +1,14 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import joblib
 from pathlib import Path
+
+from src.underwriting import (
+    evaluate_underwriting_terms,
+    generate_credit_memo_html,
+    generate_credit_memo_json
+)
 
 # ==============================================================================
 # Page Configuration & Metadata
@@ -240,6 +247,38 @@ st.markdown("""
     div.stButton > button:first-child:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    }
+
+    /* Underwriting Section Styles */
+    .underwrite-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 14px;
+        padding: 22px;
+        margin-top: 20px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    .covenant-box {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        border-radius: 10px;
+        padding: 18px 22px;
+        margin-top: 15px;
+    }
+    .covenant-item {
+        color: #cbd5e1;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .memo-download-box {
+        background: rgba(30, 41, 59, 0.5);
+        border: 1px dashed rgba(148, 163, 184, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -533,7 +572,14 @@ with st.container():
 # Prediction Action & Inference
 # ==============================================================================
 st.markdown("<br>", unsafe_allow_html=True)
-predict_clicked = st.button("🚀 Evaluate Credit Risk Now", use_container_width=True)
+col_btn1, col_btn2 = st.columns([3, 1])
+with col_btn1:
+    predict_clicked = st.button("🚀 Evaluate Credit Risk & Generate Terms", use_container_width=True)
+with col_btn2:
+    if st.button("🔄 Reset Evaluation", use_container_width=True):
+        if "evaluation_result" in st.session_state:
+            del st.session_state["evaluation_result"]
+            st.rerun()
 
 # Build applicant data dictionary with exact feature names
 applicant = {
@@ -566,36 +612,76 @@ if predict_clicked:
         probabilities = model.predict_proba(applicant_df)
         bad_index = list(model.classes_).index(2)
         bad_probability = float(probabilities[0, bad_index])
-        is_bad = bad_probability >= threshold
-        decision_label = "Bad Credit (High Risk)" if is_bad else "Good Credit (Low Risk)"
+        
+        # Evaluate Underwriting & Pricing Terms
+        terms = evaluate_underwriting_terms(
+            applicant=applicant,
+            bad_probability=bad_probability,
+            threshold=threshold
+        )
+        
+        memo_html = generate_credit_memo_html(
+            applicant=applicant,
+            labels_dict=LABELS,
+            terms=terms,
+            bad_probability=bad_probability,
+            threshold=threshold
+        )
+        memo_json = generate_credit_memo_json(
+            applicant=applicant,
+            terms=terms,
+            bad_probability=bad_probability,
+            threshold=threshold
+        )
+        
+        st.session_state["evaluation_result"] = {
+            "bad_probability": bad_probability,
+            "threshold": threshold,
+            "terms": terms,
+            "memo_html": memo_html,
+            "memo_json": memo_json,
+            "applicant": applicant
+        }
 
-    st.markdown("### 📋 Credit Risk Evaluation Report")
-    
+if "evaluation_result" in st.session_state:
+    res = st.session_state["evaluation_result"]
+    bad_probability = res["bad_probability"]
+    threshold = res["threshold"]
+    terms = res["terms"]
+    memo_html = res["memo_html"]
+    memo_json = res["memo_json"]
+
+    st.markdown("---")
+    st.markdown("### 📋 Credit Risk & Underwriting Assessment Report")
+
     # Visual Result Card
-    card_class = "result-card-bad" if is_bad else "result-card-good"
-    badge_class = "badge-bad" if is_bad else "badge-good"
-    badge_text = "RISK ALERT • FLAGGED" if is_bad else "APPROVED • PRIME ELIGIBLE"
-    metric_color_class = "metric-value-bad" if is_bad else "metric-value-good"
-    headline = "⚠️ High Risk of Credit Default" if is_bad else "✅ Credit Approved (Low Default Risk)"
-    recommendation = (
-        "Applicant exceeds the acceptable probability threshold for default. Additional collateral, lower credit limit, or senior guarantor recommended."
-        if is_bad else
-        "Applicant displays strong creditworthiness indicators and falls safely within credit risk tolerance."
-    )
+    card_class = "result-card-bad" if terms.decision == "Declined" else ("result-card-good" if terms.decision == "Approved" else "underwrite-card")
+    badge_class = "badge-bad" if terms.decision == "Declined" else "badge-good"
+    badge_text = f"{terms.decision.upper()} • {terms.risk_grade}"
+    
+    if terms.decision == "Approved":
+        headline = "✅ Facility Approved (Prime / Low Risk)"
+        recommendation = "Applicant displays strong creditworthiness indicators and falls comfortably within bank risk tolerance. Facility recommended at standard prime rates."
+    elif terms.decision == "Conditionally Approved":
+        headline = "⚠️ Facility Conditionally Approved (Structured Offer)"
+        recommendation = "Applicant meets baseline criteria with elevated risk factors. Approved subject to risk-mitigating covenants: adjusted credit limit, duration curtailment, or guarantor endorsement."
+    else:
+        headline = "⛔ Credit Facility Flagged / Declined"
+        recommendation = "Applicant exceeds the acceptable default probability threshold. Primary unsecured facility declined. Restructuring as a secured micro-credit facility or joint-application required for reconsideration."
 
     st.markdown(f"""
     <div class="{card_class}">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
             <div style="font-size: 1.5rem; font-weight: 800; color: #f8fafc;">{headline}</div>
             <span class="{badge_class}">{badge_text}</span>
         </div>
-        <p style="color: #cbd5e1; font-size: 1.05rem; margin-bottom: 20px;">
+        <p style="color: #cbd5e1; font-size: 1.05rem; margin-bottom: 0px;">
             {recommendation}
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Risk Metrics Bar & Breakdown
+    # 4 Core Probability & Cutoff Metrics
     st.markdown("<br>", unsafe_allow_html=True)
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
@@ -613,15 +699,14 @@ if predict_clicked:
             help="Configured in the sidebar based on cost-matrix optimization."
         )
     with m_col3:
-        risk_tier = "Tier 3 (High)" if bad_probability >= 0.50 else ("Tier 2 (Moderate)" if is_bad else "Tier 1 (Prime)")
         st.metric(
-            label="Risk Rating Tier",
-            value=risk_tier
+            label="Credit Rating Grade",
+            value=f"{terms.risk_grade} ({terms.risk_tier})"
         )
     with m_col4:
         st.metric(
-            label="Credit Amount Requested",
-            value=f"{credit_amount:,} DM"
+            label="Requested Facility Amount",
+            value=f"{terms.requested_amount:,.0f} DM"
         )
 
     # Visual Probability Gauge
@@ -629,5 +714,130 @@ if predict_clicked:
     progress_val = min(max(bad_probability, 0.0), 1.0)
     st.progress(progress_val)
     st.caption(
-        f"Probability Gauge: Current Score **{bad_probability:.1%}** | Policy Threshold **{threshold:.0%}**"
+        f"Probability Gauge: Current Score **{bad_probability:.1%}** | Policy Threshold **{threshold:.0%}** | Status: **{terms.decision}**"
     )
+
+    # ==============================================================================
+    # Automated Loan Terms Recommendation Engine
+    # ==============================================================================
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 🏛️ Automated Loan Terms & Pricing Recommendation")
+    st.write(
+        "Dynamic credit terms, risk-adjusted interest rate (APR) pricing, and collateral/capacity limits calculated by the Underwriting Engine:"
+    )
+
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    with t_col1:
+        st.metric(
+            label="Recommended APR",
+            value=f"{terms.recommended_apr:.2f}%",
+            delta=f"{terms.recommended_apr - 5.50:+.2f}% risk spread",
+            delta_color="inverse",
+            help="Indexed to prime base benchmark (5.50%) + econometric risk premium."
+        )
+    with t_col2:
+        st.metric(
+            label="Max Safe Credit Limit",
+            value=f"{terms.max_safe_credit_limit:,.0f} DM",
+            delta=f"{(terms.max_safe_credit_limit - terms.requested_amount):+,.0f} DM vs Requested",
+            help="Maximum prudent exposure calculated from savings, property, and debt service capacity."
+        )
+    with t_col3:
+        st.metric(
+            label="Monthly Payment (Requested)",
+            value=f"{terms.monthly_payment_requested:,.2f} DM/mo",
+            help="Fixed annuity installment for the requested amount and term."
+        )
+    with t_col4:
+        st.metric(
+            label="Monthly Payment (Recommended)",
+            value=f"{terms.monthly_payment_recommended:,.2f} DM/mo",
+            help="Fixed annuity installment for recommended safe limit."
+        )
+
+    # Side-by-Side Facility Term Comparison Table
+    st.markdown("#### ⚖️ Financing Structure: Requested vs Recommended Offer")
+    
+    comp_df = pd.DataFrame([
+        {
+            "Loan Parameter": "Principal Facility Amount",
+            "Requested Application": f"{terms.requested_amount:,.0f} DM",
+            "Underwriting Recommendation": f"{terms.max_safe_credit_limit:,.0f} DM (Max Safe Ceiling)"
+        },
+        {
+            "Loan Parameter": "Tenure (Maturity)",
+            "Requested Application": f"{terms.requested_duration} months",
+            "Underwriting Recommendation": f"{min(terms.requested_duration, 36) if terms.decision != 'Approved' else terms.requested_duration} months"
+        },
+        {
+            "Loan Parameter": "Annual Percentage Rate (APR)",
+            "Requested Application": f"{terms.recommended_apr:.2f}% (Risk-Indexed)",
+            "Underwriting Recommendation": f"{terms.recommended_apr:.2f}%"
+        },
+        {
+            "Loan Parameter": "Monthly Amortization Payment",
+            "Requested Application": f"{terms.monthly_payment_requested:,.2f} DM / month",
+            "Underwriting Recommendation": f"{terms.monthly_payment_recommended:,.2f} DM / month"
+        },
+        {
+            "Loan Parameter": "Total Interest Payable",
+            "Requested Application": f"{terms.total_interest_requested:,.2f} DM",
+            "Underwriting Recommendation": f"{terms.total_interest_recommended:,.2f} DM"
+        },
+        {
+            "Loan Parameter": "Total Facility Cost (Principal + Interest)",
+            "Requested Application": f"{terms.total_cost_requested:,.2f} DM",
+            "Underwriting Recommendation": f"{terms.total_cost_recommended:,.2f} DM"
+        },
+        {
+            "Loan Parameter": "Debt Service Ratio Assessment",
+            "Requested Application": terms.debt_service_burden,
+            "Underwriting Recommendation": terms.debt_service_burden
+        }
+    ])
+    st.table(comp_df.set_index("Loan Parameter"))
+
+    # Underwriting Covenants & Pre-conditions
+    st.markdown("#### 📜 Underwriting Conditions Precedent & Covenants")
+    st.markdown("""
+    <div class="covenant-box">
+    """, unsafe_allow_html=True)
+    for cond in terms.conditions:
+        st.markdown(f'<div class="covenant-item"><span>📌</span> <strong>{cond}</strong></div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ==============================================================================
+    # Executive Credit Assessment Memo & Export Hub
+    # ==============================================================================
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📑 Executive Credit Assessment Memo & Export Hub")
+    st.write(
+        "Generate official audit-ready documentation for credit committee review, compliance archiving, or core banking integration."
+    )
+
+    down_col1, down_col2, down_col3 = st.columns([1.5, 1.5, 2])
+    with down_col1:
+        st.download_button(
+            label="📄 Download Executive Memo (HTML / PDF)",
+            data=memo_html,
+            file_name=f"Credit_Assessment_Memo_{terms.docket_id}.html",
+            mime="text/html",
+            use_container_width=True
+        )
+    with down_col2:
+        st.download_button(
+            label="💾 Export Audit Docket (JSON)",
+            data=memo_json,
+            file_name=f"Credit_Audit_Docket_{terms.docket_id}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    with down_col3:
+        st.caption(f"Docket ID: `{terms.docket_id}` | Generated: `{terms.timestamp}`")
+
+    # Interactive In-App Memorandum Preview
+    with st.expander("👁️ View Live Credit Committee Memorandum Preview", expanded=False):
+        st.markdown(
+            "Below is the exact memorandum generated for this evaluation. You can also print or save directly to PDF using your browser's Print feature (`Ctrl+P` or the print button inside the preview)."
+        )
+        components.html(memo_html, height=750, scrolling=True)
