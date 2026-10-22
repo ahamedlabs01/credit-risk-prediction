@@ -503,10 +503,11 @@ The project includes an interactive web application implemented in `app.py`.
 ### Application Features
 
 - **Executive Fintech Design:** Modern dark-slate theme with glassmorphism cards and Inter typography.
-- **Structured 3-Column Inputs:** 
-  1. *Loan & Financial Status* (Duration slider, Credit Amount input, Checking balance, Savings, Purpose, Installment rate).
-  2. *Personal & Employment* (Age slider, Employment tenure, Job category, Personal status, Dependents, Foreign worker status).
-  3. *Assets, History & Collateral* (Credit history, Housing, Property, Other debtors/guarantors, Other plans, Existing credits).
+- **Step-by-Step Loan Application Wizard:** An intuitive 4-step guided underwriting workflow with an interactive stepper bar, progress badges, and direct section jumpers:
+  1. *Step 1: Loan & Financing Request* (Facility duration slider, Credit Amount input, Purpose, Installment rate, and live monthly principal preview).
+  2. *Step 2: Personal Profile & Employment* (Age slider, Employment tenure, Job category, Personal & marital status, Dependents, Foreign worker status).
+  3. *Step 3: Financial Assets & Credit History* (Checking account liquidity, Savings reserves, Repayment record, Property collateral asset, Housing, Debtors/guarantors, Other plans, Existing credits).
+  4. *Step 4: Executive Underwriting & Decision Report* (Full default probability scoring, recommended APR pricing, max credit capacity sizing, comparison table, conditions, and export hub).
 - **Human-Readable Dropdowns:** All German Credit codes (`A11`, `A12`, etc.) are mapped to intuitive labels while preserving backend numerical/categorical encoding.
 - **One-Click Presets (Sidebar):** Test profiles with pre-configured parameters:
   - 🌟 **Prime (Low Risk):** Low default probability applicant.
