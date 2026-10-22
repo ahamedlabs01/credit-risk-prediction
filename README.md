@@ -173,7 +173,7 @@ flowchart TD
 
     subgraph S4 ["4. Application & Interface Layer (app.py)"]
         H1 & H2 & H3 & I & J & K & L --> M["CreditIQ Streamlit Web Interface"]
-        M --> N["3-Column Intuitive Applicant Form"]
+        M --> N["Step-by-Step Guided Applicant Wizard"]
         M --> O["Real-Time Default Risk Spectrum Gauge"]
         M --> P["Side-by-Side Facility Comparison Table"]
     end
@@ -197,7 +197,7 @@ flowchart TD
 | **1. Data Ingestion** | `data/german.data`<br>`notebooks/credit_risk_analysis.ipynb` | Tabular data parsing, validation checks, EDA distributions, and stratified 80/20 train-test split. | Clean training and test sets preserving 70:30 class balance |
 | **2. Machine Learning** | `src/train.py`<br>`models/credit_risk_model.pkl` | Scikit-learn `ColumnTransformer` (OneHotEncoder + StandardScaler), Logistic Regression, 5:1 cost matrix optimization. | Serialized production artifact (`credit_risk_model.pkl`) with calibrated 30% decision cutoff |
 | **3. Underwriting Engine** | `src/underwriting.py` | Risk-adjusted APR pricing, collateral-based credit limit sizing, annuity loan amortization, and profile-tailored condition-precedent generation. | `UnderwritingTerms` data model with loan pricing and covenants |
-| **4. Presentation Layer** | `app.py`<br>`streamlit` | Modern responsive UI, 3-column input architecture, one-click preset profiles (Prime vs High Risk), real-time risk gauges, side-by-side financing table. | Interactive, session-persistent loan officer dashboard |
+| **4. Presentation Layer** | `app.py`<br>`streamlit` | Modern responsive UI, 4-step guided loan application wizard, one-click preset profiles (Prime vs High Risk), real-time risk gauges, side-by-side financing table. | Interactive, session-persistent loan officer dashboard |
 | **5. Audit & Governance** | `src/underwriting.py`<br>`app.py` | Official Credit Committee Memorandum rendering with printable PDF styles (`@media print`), browser print triggers, and JSON audit log generation. | Downloadable HTML/PDF Memorandum and JSON Audit Docket |
 
 ---
@@ -223,7 +223,7 @@ credit-risk-prediction/
 │   └── underwriting.py         # Underwriting engine, risk-adjusted APR pricing, amortization & memo generation
 │
 ├── screenshots/
-│   ├── app_interface.png       # Modern 3-column CreditIQ web UI screenshot
+│   ├── app_interface.png       # Guided application wizard & stepper UI screenshot
 │   ├── prediction_result.png   # Risk evaluation report & spectrum gauge screenshot
 │   └── feature_importance.png  # Top 10 predictive feature weights plot
 │
@@ -236,7 +236,7 @@ credit-risk-prediction/
 
 | File or Directory | Purpose |
 |---|---|
-| `app.py` | Modern Streamlit web application (CreditIQ) with 3-column inputs, preset profiles, underwriting evaluation, and memo export hub |
+| `app.py` | Modern Streamlit web application (CreditIQ) featuring a 4-step loan application wizard, underwriting engine, and memo export hub |
 | `src/underwriting.py` | Underwriting & pricing engine: risk-adjusted APR spreads, max safe credit limits, amortization schedules, covenants, and HTML/JSON memo generators |
 | `src/train.py` | Standalone reproducible training, metric evaluation, cost-matrix optimization, and pipeline packaging |
 | `data/` | Dataset directory containing the raw `german.data` file |
@@ -620,7 +620,7 @@ The following checks and validations were completed during development:
 - **Reporting & Export Hub Validation:**
   - Executive Credit Assessment Memorandum HTML generation with `@media print` layout and 1-click PDF print trigger.
   - Audit Docket JSON serialization with complete application audit trail.
-- **Application Validation:** Streamlit application launch, 3-column input rendering, preset loading, and session-state persistence verified under headless test execution.
+- **Application Validation:** Streamlit application launch, 4-step wizard stepper navigation, preset loading, and session-state persistence verified under headless test execution.
 
 ---
 
@@ -673,7 +673,7 @@ Any future tuning should preserve a final untouched test set for unbiased evalua
 
 ## 📸 Project Screenshots
 
-### 1. Application Interface (CreditIQ 3-Column Layout & Presets)
+### 1. Application Interface (CreditIQ Step-by-Step Wizard & Stepper Navigation)
 ![Application Interface](screenshots/app_interface.png)
 
 ### 2. Credit Risk Evaluation Report & Spectrum Gauge
