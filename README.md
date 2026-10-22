@@ -144,55 +144,61 @@ https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data
 
 ## 🏗️ 6. Project Architecture
 
-The application follows this end-to-end workflow:
+CreditIQ implements a modular 5-tier financial intelligence architecture, decoupling data ingestion, machine learning inference, automated underwriting policy evaluation, presentation, and compliance auditing.
 
-`	ext
-                 German Credit Dataset
-                           |
-                           v
-                  Data Loading & Validation
-                           |
-                           v
-           Exploratory Data Analysis (EDA)
-                           |
-                           v
-         Stratified Train-Test Split (80/20)
-                           |
-                           v
-                 Data Preprocessing
-        (ColumnTransformer: One-Hot & Scaling)
-                           |
-                           v
-       Logistic Regression Pipeline Optimization
-                           |
-                           v
-       Probability Estimation & Threshold Tuning (0.3)
-                           |
-                           v
-       Automated Underwriting & Pricing Engine
-  ┌──────────────────────────────────────────────────┐
-  │ - Risk-Adjusted APR Calculation (Spread Pricing) │
-  │ - Max Safe Credit Limit Capacity Modeling        │
-  │ - Amortization Schedules & Debt-Service Burden   │
-  │ - Risk Covenants & Conditions Precedent          │
-  └──────────────────────────────────────────────────┘
-                           |
-                           v
-         CreditIQ Modern Streamlit Interface
-  ┌──────────────────────────────────────────────────┐
-  │ - Interactive 3-Column Applicant Evaluation Form │
-  │ - Real-Time Dynamic Risk Spectrum Gauge          │
-  │ - Side-by-Side Facility Amortization Comparison  │
-  └──────────────────────────────────────────────────┘
-                           |
-                           v
-     Executive Credit Assessment Memo & Audit Export
-  ┌──────────────────────────────────────────────────┐
-  │ - Printable PDF / HTML Credit Committee Memo     │
-  │ - Structured Audit Docket (JSON Export)          │
-  │ - Live In-App Document Preview & 1-Click Print   │
-  └──────────────────────────────────────────────────┘
-`
+```mermaid
+flowchart TD
+    subgraph S1 ["1. Data Ingestion & Validation Layer"]
+        A["UCI German Credit Dataset (1,000 Records • 20 Features)"] --> B["Data Quality & Schema Checks (Missing Values & Distribution Analysis)"]
+        B --> C["Stratified Train-Test Split (80% Training / 20% Holdout Testing)"]
+    end
+
+    subgraph S2 ["2. Machine Learning Pipeline (src/train.py)"]
+        C --> D["Feature Preprocessing Pipeline (ColumnTransformer: One-Hot & Scaling)"]
+        D --> E["Regularized Logistic Regression (L2 Regularization • 5,000 Iterations)"]
+        E --> F["Default Probability Estimator (Cost-Optimized Cutoff Threshold @ 30%)"]
+    end
+
+    subgraph S3 ["3. Underwriting & Pricing Engine (src/underwriting.py)"]
+        F --> G{"Risk Policy Evaluation"}
+        G -->|"Prob < Cutoff"| H1["Approved • Prime Eligible (Grades: AAA, AA, A)"]
+        G -->|"Near Cutoff"| H2["Conditionally Approved (Grades: BBB, BB)"]
+        G -->|"Prob > Cutoff"| H3["Credit Declined / High Risk (Grades: B, CCC)"]
+        
+        G --> I["Risk-Adjusted APR Pricing (Base 5.50% + Credit Risk Spread)"]
+        G --> J["Safe Credit Limit Sizing (Collateral, Savings & Capacity Cap)"]
+        G --> K["Loan Amortization Engine (Fixed Annuity Payments & Total Outflows)"]
+        G --> L["Covenants & Conditions Precedent (Guarantor, Down Payment & Maturity)"]
+    end
+
+    subgraph S4 ["4. Application & Interface Layer (app.py)"]
+        H1 & H2 & H3 & I & J & K & L --> M["CreditIQ Streamlit Web Interface"]
+        M --> N["3-Column Intuitive Applicant Form"]
+        M --> O["Real-Time Default Risk Spectrum Gauge"]
+        M --> P["Side-by-Side Facility Comparison Table"]
+    end
+
+    subgraph S5 ["5. Governance & Export Hub"]
+        P --> Q["Printable Executive Credit Memo (HTML with @media print & 1-Click PDF)"]
+        P --> R["Structured Audit Docket (Machine-Readable JSON Audit Trail)"]
+    end
+
+    style S1 fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc
+    style S2 fill:#0f172a,stroke:#818cf8,stroke-width:2px,color:#f8fafc
+    style S3 fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc
+    style S4 fill:#0f172a,stroke:#fbbf24,stroke-width:2px,color:#f8fafc
+    style S5 fill:#0f172a,stroke:#f472b6,stroke-width:2px,color:#f8fafc
+```
+
+### Architectural Layer Specifications
+
+| Layer | Core Module / File | Technologies & Methodologies | Deliverables & Artifacts |
+|---|---|---|---|
+| **1. Data Ingestion** | `data/german.data`<br>`notebooks/credit_risk_analysis.ipynb` | Tabular data parsing, validation checks, EDA distributions, and stratified 80/20 train-test split. | Clean training and test sets preserving 70:30 class balance |
+| **2. Machine Learning** | `src/train.py`<br>`models/credit_risk_model.pkl` | Scikit-learn `ColumnTransformer` (OneHotEncoder + StandardScaler), Logistic Regression, 5:1 cost matrix optimization. | Serialized production artifact (`credit_risk_model.pkl`) with calibrated 30% decision cutoff |
+| **3. Underwriting Engine** | `src/underwriting.py` | Risk-adjusted APR pricing, collateral-based credit limit sizing, annuity loan amortization, and profile-tailored condition-precedent generation. | `UnderwritingTerms` data model with loan pricing and covenants |
+| **4. Presentation Layer** | `app.py`<br>`streamlit` | Modern responsive UI, 3-column input architecture, one-click preset profiles (Prime vs High Risk), real-time risk gauges, side-by-side financing table. | Interactive, session-persistent loan officer dashboard |
+| **5. Audit & Governance** | `src/underwriting.py`<br>`app.py` | Official Credit Committee Memorandum rendering with printable PDF styles (`@media print`), browser print triggers, and JSON audit log generation. | Downloadable HTML/PDF Memorandum and JSON Audit Docket |
 
 ---
 
