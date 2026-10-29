@@ -3,7 +3,8 @@ Underwriting & Loan Terms Recommendation Engine
 ================================================
 Provides risk-adjusted interest rate (APR) pricing, maximum credit limit sizing,
 loan amortization schedules, risk covenant determinations, and executive Credit
-Assessment Memo generation for credit risk prediction.
+Assessment Memo generation for credit risk prediction, enhanced with CIBIL score
+bureau evaluation.
 """
 
 from dataclasses import dataclass, field
@@ -32,6 +33,24 @@ class UnderwritingTerms:
     conditions: List[str] = field(default_factory=list)
     docket_id: str = field(default_factory=lambda: f"CR-{datetime.now().strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}")
     timestamp: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    cibil_score: int = 700
+    cibil_tier: str = "Good / Standard (700-749)"
+    is_knockout: bool = False
+    knockout_reason: str = ""
+
+
+def get_cibil_tier_label(score: int) -> str:
+    """Returns standardized industry risk tier for a given CIBIL score."""
+    if score >= 750:
+        return "Prime / Excellent (750-900)"
+    elif score >= 700:
+        return "Good / Standard (700-749)"
+    elif score >= 650:
+        return "Fair / Moderate Risk (650-699)"
+    elif score >= 550:
+        return "Poor / Elevated Risk (550-649)"
+    else:
+        return "Subprime / Critical Risk (300-549)"
 
 
 def calculate_amortization(principal: float, annual_rate_pct: float, tenure_months: int) -> Dict[str, float]:
@@ -65,21 +84,33 @@ def evaluate_underwriting_terms(
 ) -> UnderwritingTerms:
     """
     Evaluates applicant profile and generates risk-based loan pricing,
-    max credit sizing, and underwriting covenants.
+    max credit sizing, and underwriting covenants incorporating CIBIL bureau scoring.
     """
     requested_amount = float(applicant.get("credit_amount", 3000))
     requested_duration = int(applicant.get("duration", 24))
     installment_rate = int(applicant.get("installment_rate", 2))
     
+    cibil_score = int(applicant.get("cibil_score", 720))
+    cibil_tier = get_cibil_tier_label(cibil_score)
+    is_knockout = False
+    knockout_reason = ""
+
     # -------------------------------------------------------------------------
-    # 1. Determine Decision & Risk Grade
+    # 1. Determine Decision & Risk Grade (incorporating CIBIL Knockout)
     # -------------------------------------------------------------------------
-    if bad_probability < threshold * 0.70:
+    # Hard Bureau Policy Cutoff: CIBIL below 600 triggers an automated knockout
+    if cibil_score < 600:
+        decision = "Declined"
+        risk_grade = "CCC"
+        risk_tier = "Tier 3 (Subprime / Bureau Knockout)"
+        is_knockout = True
+        knockout_reason = f"CIBIL Bureau Score of {cibil_score} falls below institution minimum threshold of 600."
+    elif bad_probability < threshold * 0.70:
         decision = "Approved"
-        if bad_probability < 0.12:
+        if bad_probability < 0.12 and cibil_score >= 750:
             risk_grade = "AAA"
-            risk_tier = "Tier 1 (Prime)"
-        elif bad_probability < 0.20:
+            risk_tier = "Tier 1 (Super Prime)"
+        elif bad_probability < 0.20 and cibil_score >= 700:
             risk_grade = "AA"
             risk_tier = "Tier 1 (Prime)"
         else:
@@ -113,6 +144,20 @@ def evaluate_underwriting_terms(
     # Specific adjustment factors
     modifiers = 0.0
     
+    # CIBIL score spread modifier
+    if cibil_score >= 800:
+        modifiers -= 1.25  # Super prime discount
+    elif cibil_score >= 750:
+        modifiers -= 0.75  # Prime concession
+    elif cibil_score >= 700:
+        modifiers += 0.00  # Standard benchmark
+    elif cibil_score >= 650:
+        modifiers += 1.50  # Moderate risk spread
+    elif cibil_score >= 600:
+        modifiers += 3.00  # Subprime spread
+    else:
+        modifiers += 6.00  # Knockout / critical spread
+
     # Savings adjustment
     savings = applicant.get("savings", "A61")
     if savings == "A64":  # >= 1000 DM
@@ -154,7 +199,7 @@ def evaluate_underwriting_terms(
     # -------------------------------------------------------------------------
     # 3. Maximum Safe Credit Limit Sizing (DM)
     # -------------------------------------------------------------------------
-    # Base calculation uses collateral, savings tier, tenure, and risk score
+    # Base calculation uses collateral, savings tier, tenure, and CIBIL score
     savings_mult = {
         "A61": 0.85, "A62": 1.00, "A63": 1.25, "A64": 1.60, "A65": 0.90
     }.get(savings, 1.0)
@@ -167,8 +212,22 @@ def evaluate_underwriting_terms(
         "A71": 0.40, "A72": 0.75, "A73": 1.00, "A74": 1.20, "A75": 1.35
     }.get(employment, 1.0)
 
+    # CIBIL bureau multiplier
+    if cibil_score >= 800:
+        cibil_mult = 1.25
+    elif cibil_score >= 750:
+        cibil_mult = 1.10
+    elif cibil_score >= 700:
+        cibil_mult = 1.00
+    elif cibil_score >= 650:
+        cibil_mult = 0.80
+    elif cibil_score >= 600:
+        cibil_mult = 0.60
+    else:
+        cibil_mult = 0.35
+
     # Composite financial capacity coefficient
-    capacity_factor = savings_mult * property_mult * emp_mult
+    capacity_factor = savings_mult * property_mult * emp_mult * cibil_mult
 
     if decision == "Approved":
         # Can approve full requested amount or offer higher pre-approved ceiling
@@ -207,13 +266,20 @@ def evaluate_underwriting_terms(
     # -------------------------------------------------------------------------
     conditions = []
     
-    if decision == "Approved":
+    if is_knockout:
+        conditions.append(f"⛔ Bureau Knockout: CIBIL score ({cibil_score}) fails minimum bank eligibility cutoff (600). Facility automatically declined.")
+        conditions.append("Applicant must demonstrate 6+ months of consecutive on-time debt service to elevate CIBIL above 600 before reapplication.")
+    elif decision == "Approved":
         conditions.append("Standard identity, residential verification, and income validation.")
+        if cibil_score >= 750:
+            conditions.append(f"🌟 Prime Bureau Status (CIBIL {cibil_score}): Fast-track processing and preferential rate concession approved.")
         if requested_amount > 10000:
             conditions.append("Senior underwriter countersignature required for credit facility exceeding 10,000 DM.")
         if savings in ["A61", "A65"]:
             conditions.append("Establish automated direct-debit on primary checking account for monthly installments.")
     elif decision == "Conditionally Approved":
+        if cibil_score < 680:
+            conditions.append(f"CIBIL score ({cibil_score}) indicates moderate bureau history: require a creditworthy co-borrower or guarantor (CIBIL 750+).")
         if requested_amount > max_safe_credit_limit:
             conditions.append(f"Cap facility amount at recommended limit of {max_safe_credit_limit:,.0f} DM (down from requested {requested_amount:,.0f} DM).")
         if requested_duration > 36:
@@ -246,7 +312,11 @@ def evaluate_underwriting_terms(
         total_interest_recommended=amort_rec["total_interest"],
         total_cost_recommended=amort_rec["total_payment"],
         debt_service_burden=debt_service_burden,
-        conditions=conditions
+        conditions=conditions,
+        cibil_score=cibil_score,
+        cibil_tier=cibil_tier,
+        is_knockout=is_knockout,
+        knockout_reason=knockout_reason
     )
 
 
@@ -272,6 +342,14 @@ def generate_credit_memo_html(
         if isinstance(val, str) and val in labels_dict:
             return f"{labels_dict[val]} <span style='color:#64748b; font-size:0.85em;'>({val})</span>"
         return str(val)
+
+    knockout_notice = ""
+    if terms.is_knockout:
+        knockout_notice = f"""
+        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; color: #b91c1c; font-size: 13.5px;">
+            <strong>⚠️ Bureau Knockout Policy Activated:</strong> {terms.knockout_reason}
+        </div>
+        """
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -382,7 +460,7 @@ def generate_credit_memo_html(
     /* Key Terms KPI Grid */
     .kpi-grid {{
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
         gap: 16px;
         margin-bottom: 30px;
     }}
@@ -559,9 +637,11 @@ def generate_credit_memo_html(
         <div class="memo-meta">
             <div><strong>Docket No:</strong> {terms.docket_id}</div>
             <div><strong>Date:</strong> {terms.timestamp}</div>
-            <div><strong>Assessment Engine:</strong> Logistic ML v1.2</div>
+            <div><strong>Assessment Engine:</strong> ML & CIBIL Bureau v2.0</div>
         </div>
     </div>
+
+    {knockout_notice}
 
     <div class="decision-banner">
         <div>
@@ -575,6 +655,11 @@ def generate_credit_memo_html(
 
     <div class="kpi-grid">
         <div class="kpi-card">
+            <div class="kpi-label">CIBIL Bureau Score</div>
+            <div class="kpi-value">{terms.cibil_score}</div>
+            <div class="kpi-sub">{terms.cibil_tier}</div>
+        </div>
+        <div class="kpi-card">
             <div class="kpi-label">Recommended APR</div>
             <div class="kpi-value">{terms.recommended_apr:.2f}%</div>
             <div class="kpi-sub">Risk-Adjusted Spread</div>
@@ -582,7 +667,7 @@ def generate_credit_memo_html(
         <div class="kpi-card">
             <div class="kpi-label">Max Credit Limit</div>
             <div class="kpi-value">{terms.max_safe_credit_limit:,.0f} DM</div>
-            <div class="kpi-sub">Collateral/Capacity Cap</div>
+            <div class="kpi-sub">Capacity & Bureau Cap</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-label">Monthly Amortization</div>
@@ -618,7 +703,7 @@ def generate_credit_memo_html(
             </tr>
             <tr>
                 <td><strong>Annual Percentage Rate (APR)</strong></td>
-                <td>{terms.recommended_apr:.2f}% (Risk Indexed)</td>
+                <td>{terms.recommended_apr:.2f}% (Risk & Bureau Indexed)</td>
                 <td>{terms.recommended_apr:.2f}%</td>
             </tr>
             <tr>
@@ -647,10 +732,16 @@ def generate_credit_memo_html(
     <table class="table-container">
         <tbody>
             <tr>
-                <td style="width: 25%;"><strong>Checking Status:</strong></td>
-                <td style="width: 25%;">{fmt('checking_account')}</td>
-                <td style="width: 25%;"><strong>Savings Balance:</strong></td>
-                <td style="width: 25%;">{fmt('savings')}</td>
+                <td style="width: 25%;"><strong>CIBIL Bureau Score:</strong></td>
+                <td style="width: 25%;"><strong>{terms.cibil_score}</strong> ({terms.cibil_tier})</td>
+                <td style="width: 25%;"><strong>Bureau Eligibility:</strong></td>
+                <td style="width: 25%;">{'⛔ Below Minimum Policy Cutoff (600)' if terms.is_knockout else '✅ Bureau Minimum Satisfied'}</td>
+            </tr>
+            <tr>
+                <td><strong>Checking Status:</strong></td>
+                <td>{fmt('checking_account')}</td>
+                <td><strong>Savings Balance:</strong></td>
+                <td>{fmt('savings')}</td>
             </tr>
             <tr>
                 <td><strong>Credit History:</strong></td>
@@ -704,7 +795,7 @@ def generate_credit_memo_html(
     </div>
 
     <div class="disclaimer">
-        CONFIDENTIAL CREDIT MEMORANDUM: This document and the predictive analytics contained herein are generated by CreditIQ automated statistical risk models. The risk score and recommended parameters reflect econometric probabilities trained on historical credit performance and do not constitute an irrevocable binding loan agreement until finalized by designated lending officers.
+        CONFIDENTIAL CREDIT MEMORANDUM: This document and the predictive analytics contained herein are generated by CreditIQ automated statistical risk models and TransUnion CIBIL bureau criteria. The risk score and recommended parameters reflect econometric probabilities trained on historical credit performance and do not constitute an irrevocable binding loan agreement until finalized by designated lending officers.
     </div>
 </div>
 
@@ -731,6 +822,10 @@ def generate_credit_memo_json(
             "underwriting_decision": terms.decision,
             "credit_rating_grade": terms.risk_grade,
             "risk_tier": terms.risk_tier,
+            "cibil_score": terms.cibil_score,
+            "cibil_tier": terms.cibil_tier,
+            "is_knockout": terms.is_knockout,
+            "knockout_reason": terms.knockout_reason,
         },
         "recommended_loan_terms": {
             "recommended_apr_percentage": terms.recommended_apr,

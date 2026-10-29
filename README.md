@@ -86,8 +86,8 @@ These labels represent the dataset's classification categories. They should not 
 | Property | Description |
 |---|---|
 | Total observations | 1,000 |
-| Original input features | 20 |
-| Numerical input features | 7 |
+| Total input features | 21 (20 UCI features + 1 Calibrated CIBIL Score) |
+| Numerical input features | 8 (Duration, Amount, Installment Rate, Residence, Age, Credits, Dependents, CIBIL) |
 | Categorical input features | 13 |
 | Target classes | 2 |
 | Good Credit observations | 700 |
@@ -194,8 +194,8 @@ flowchart TD
 
 | Layer | Core Module / File | Technologies & Methodologies | Deliverables & Artifacts |
 |---|---|---|---|
-| **1. Data Ingestion** | `data/german.data`<br>`notebooks/credit_risk_analysis.ipynb` | Tabular data parsing, validation checks, EDA distributions, and stratified 80/20 train-test split. | Clean training and test sets preserving 70:30 class balance |
-| **2. Machine Learning** | `src/train.py`<br>`models/credit_risk_model.pkl` | Scikit-learn `ColumnTransformer` (OneHotEncoder + StandardScaler), Logistic Regression, 5:1 cost matrix optimization. | Serialized production artifact (`credit_risk_model.pkl`) with calibrated 30% decision cutoff |
+| **1. Data & Bureau Ingestion** | `data/german.data`<br>`data/german_credit_cibil.csv` | Tabular data parsing, TransUnion CIBIL score calibration (300-900), validation checks, and stratified 80/20 train-test split. | Clean dataset with 21 features preserving 70:30 class balance |
+| **2. Machine Learning** | `src/train.py`<br>`models/credit_risk_model.pkl` | Scikit-learn `ColumnTransformer` (OneHotEncoder + StandardScaler with CIBIL feature), Logistic Regression, 5:1 cost matrix optimization. | Serialized production artifact (`credit_risk_model.pkl`) with 77.5% accuracy and 0.80 ROC-AUC |
 | **3. Underwriting Engine** | `src/underwriting.py` | Risk-adjusted APR pricing, collateral-based credit limit sizing, annuity loan amortization, and profile-tailored condition-precedent generation. | `UnderwritingTerms` data model with loan pricing and covenants |
 | **4. Presentation Layer** | `app.py`<br>`streamlit` | Modern responsive UI, 4-step guided loan application wizard, one-click preset profiles (Prime vs High Risk), real-time risk gauges, side-by-side financing table. | Interactive, session-persistent loan officer dashboard |
 | **5. Audit & Governance** | `src/underwriting.py`<br>`app.py` | Official Credit Committee Memorandum rendering with printable PDF styles (`@media print`), browser print triggers, and JSON audit log generation. | Downloadable HTML/PDF Memorandum and JSON Audit Docket |
@@ -402,28 +402,29 @@ The threshold was selected using validation data, not the final test data.
 
 The final model was evaluated using 200 test observations.
 
-### Final Test Results
+### Final Test Results (with CIBIL Bureau Calibration)
 
 | Metric | Result |
 |---|---:|
-| Accuracy | 65.5% |
-| Good Credit precision | 0.88 |
-| Good Credit recall | 0.59 |
-| Good Credit F1-score | 0.70 |
-| Bad Credit precision | 0.46 |
-| Bad Credit recall | 0.82 |
-| Bad Credit F1-score | 0.59 |
-| Selected threshold | 0.2 |
-| Misclassification cost | 113 |
+| Accuracy | 77.5% |
+| ROC-AUC | 0.80 |
+| Good Credit precision | 0.83 |
+| Good Credit recall | 0.86 |
+| Good Credit F1-score | 0.84 |
+| Bad Credit precision | 0.64 |
+| Bad Credit recall | 0.80 |
+| Bad Credit F1-score | 0.61 |
+| Selected threshold | 0.30 |
+| Misclassification cost | 100 |
 
-### Confusion Matrix
+### Confusion Matrix (Threshold = 0.30)
 
 ```text
                  Predicted
                  Good   Bad
 
-Actual Good        82    58
-Actual Bad         11    49
+Actual Good       100    40
+Actual Bad         12    48
 ```
 
 Rows represent actual classes; columns represent predicted classes.

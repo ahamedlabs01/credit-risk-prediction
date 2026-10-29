@@ -342,7 +342,8 @@ PRESET_PRIME = {
     "housing": "A152",          # own
     "job": "A173",              # skilled employee
     "telephone": "A192",        # yes
-    "foreign_worker": "A201"    # yes
+    "foreign_worker": "A201",   # yes
+    "cibil_score": 820
 }
 
 PRESET_HIGH_RISK = {
@@ -365,7 +366,8 @@ PRESET_HIGH_RISK = {
     "housing": "A151",          # rent
     "job": "A172",              # unskilled
     "telephone": "A191",        # none
-    "foreign_worker": "A201"    # yes
+    "foreign_worker": "A201",   # yes
+    "cibil_score": 540
 }
 
 def apply_preset(preset_dict, run_eval=True):
@@ -465,9 +467,10 @@ with st.sidebar:
     st.markdown("### 📊 Model Architecture")
     st.markdown("""
     - **Classifier:** Regularized Logistic Regression
+    - **Bureau Engine:** TransUnion CIBIL (300–900)
     - **Encoder:** Scikit-Learn `ColumnTransformer`
     - **Scaler:** `StandardScaler` (Sparse preservation)
-    - **Dataset:** German Credit (UCI ML Repository)
+    - **Dataset:** German Credit + CIBIL Bureau Calibration
     """)
     st.caption("🔒 *Educational & demonstration prototype.*")
 
@@ -546,7 +549,8 @@ def get_current_applicant():
         "job": st.session_state.get("input_job", "A173"),
         "dependents": st.session_state.get("input_dependents", 1),
         "telephone": st.session_state.get("input_telephone", "A192"),
-        "foreign_worker": st.session_state.get("input_foreign_worker", "A201")
+        "foreign_worker": st.session_state.get("input_foreign_worker", "A201"),
+        "cibil_score": int(st.session_state.get("input_cibil_score", 720))
     }
 
 # ==============================================================================
@@ -726,6 +730,30 @@ elif current_step == 3:
     col1, col2 = st.columns(2, gap="large")
 
     with col1:
+        # CIBIL Score Slider & Bureau Badge
+        cibil_val = st.slider(
+            "CIBIL Bureau Credit Score",
+            min_value=300,
+            max_value=900,
+            value=int(st.session_state.get("input_cibil_score", 720)),
+            step=5,
+            help="Official bureau credit score (300–900). Scores below 600 trigger an automated policy knockout."
+        )
+        st.session_state["input_cibil_score"] = cibil_val
+
+        if cibil_val >= 750:
+            cibil_badge = f"<span style='background:#065f46; color:#34d399; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>🟢 Prime / Excellent ({cibil_val})</span>"
+        elif cibil_val >= 700:
+            cibil_badge = f"<span style='background:#1e3a8a; color:#60a5fa; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>🔵 Good / Standard ({cibil_val})</span>"
+        elif cibil_val >= 650:
+            cibil_badge = f"<span style='background:#78350f; color:#fde047; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>🟡 Fair / Moderate Risk ({cibil_val})</span>"
+        elif cibil_val >= 600:
+            cibil_badge = f"<span style='background:#7c2d12; color:#fdba74; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>🟠 Poor / Elevated Risk ({cibil_val})</span>"
+        else:
+            cibil_badge = f"<span style='background:#7f1d1d; color:#fca5a5; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>⛔ Subprime / Bureau Knockout ({cibil_val})</span>"
+
+        st.markdown(f"<div style='margin-top:-8px; margin-bottom:16px;'>Bureau Standing: {cibil_badge}</div>", unsafe_allow_html=True)
+
         checking_options = ["A11", "A12", "A13", "A14"]
         def_chk = st.session_state.get("input_checking_account", "A12")
         chk_index = checking_options.index(def_chk) if def_chk in checking_options else 1
@@ -873,6 +901,9 @@ elif current_step == 4:
             st.session_state.wizard_step = 1
             st.rerun()
 
+    if terms.is_knockout:
+        st.error(f"⛔ **Bureau Policy Knockout:** {terms.knockout_reason} Unsecured credit facilities are automatically declined under current credit policy.")
+
     # Visual Result Card
     card_class = "result-card-bad" if terms.decision == "Declined" else ("result-card-good" if terms.decision == "Approved" else "underwrite-card")
     badge_class = "badge-bad" if terms.decision == "Declined" else "badge-good"
@@ -900,9 +931,9 @@ elif current_step == 4:
     </div>
     """, unsafe_allow_html=True)
 
-    # 4 Core Probability & Cutoff Metrics
+    # 5 Core Probability, Bureau & Cutoff Metrics
     st.markdown("<br>", unsafe_allow_html=True)
-    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
 
     with m_col1:
         st.metric(
@@ -918,11 +949,20 @@ elif current_step == 4:
             help="Configured in the sidebar based on cost-matrix optimization."
         )
     with m_col3:
+        cibil_delta_color = "normal" if terms.cibil_score >= 700 else ("off" if terms.cibil_score >= 600 else "inverse")
+        st.metric(
+            label="CIBIL Bureau Score",
+            value=f"{terms.cibil_score}",
+            delta=terms.cibil_tier.split("(")[0].strip(),
+            delta_color=cibil_delta_color,
+            help="Bureau credit rating on 300 to 900 scale."
+        )
+    with m_col4:
         st.metric(
             label="Credit Rating Grade",
             value=f"{terms.risk_grade} ({terms.risk_tier})"
         )
-    with m_col4:
+    with m_col5:
         st.metric(
             label="Requested Facility Amount",
             value=f"{terms.requested_amount:,.0f} DM"
@@ -975,6 +1015,11 @@ elif current_step == 4:
     # Side-by-Side Facility Term Comparison Table
     st.markdown("#### ⚖️ Financing Structure: Requested vs Recommended Offer")
     comp_df = pd.DataFrame([
+        {
+            "Loan Parameter": "CIBIL Bureau Standing",
+            "Requested Application": f"{terms.cibil_score} ({terms.cibil_tier})",
+            "Underwriting Recommendation": "✅ Passed Policy Floor (≥ 600)" if not terms.is_knockout else "⛔ Bureau Knockout Rejection"
+        },
         {
             "Loan Parameter": "Principal Facility Amount",
             "Requested Application": f"{terms.requested_amount:,.0f} DM",
