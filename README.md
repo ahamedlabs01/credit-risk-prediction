@@ -66,7 +66,7 @@ The system:
 ### Target Variable
 
 | Target Value | Meaning | Description |
-|---|---|---|
+| --- | --- | --- |
 | `1` | **Good Credit** | High repayment probability; eligible for prime or standard facility |
 | `2` | **Bad Credit** | Elevated default probability; requires covenants or decline |
 
@@ -81,7 +81,7 @@ The system:
 ### Dataset Characteristics
 
 | Property | Description |
-|---|---|
+| --- | --- |
 | Total observations | 1,000 |
 | Total input features | 21 (20 UCI features + 1 Calibrated CIBIL Bureau Score) |
 | Numerical input features | 8 (Duration, Amount, Installment Rate, Residence, Age, Existing Credits, Dependents, CIBIL) |
@@ -107,7 +107,7 @@ The system:
 ## 🛠️ 5. Technology Stack
 
 | Technology | Purpose |
-|---|---|
+| --- | --- |
 | Python 3.9+ | Core programming language |
 | Pandas | Data loading, manipulation, and feature engineering |
 | NumPy | Numerical matrix operations and vectorization |
@@ -172,7 +172,7 @@ flowchart TD
 ### Architectural Layer Specifications
 
 | Layer | Core Module / File | Technologies & Methodologies | Deliverables & Artifacts |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **1. Data & Bureau Ingestion** | `data/german.data`<br>`data/german_credit_cibil.csv` | Tabular data parsing, TransUnion CIBIL score calibration (300-900), validation checks, and stratified 80/20 train-test split. | Clean dataset with 21 features preserving 70:30 class balance |
 | **2. Machine Learning** | `src/train.py`<br>`models/credit_risk_model.pkl` | Scikit-learn `ColumnTransformer` (OneHotEncoder + StandardScaler with CIBIL feature), Logistic Regression, 5:1 cost matrix optimization. | Serialized production artifact (`credit_risk_model.pkl`) with 77.5% accuracy and 0.80 ROC-AUC |
 | **3. Underwriting Engine** | `src/underwriting.py` | Bureau policy knockout (<600), risk-adjusted APR pricing, collateral & CIBIL credit limit sizing, annuity loan amortization, and covenant generation. | `UnderwritingTerms` data model with loan pricing and covenants |
@@ -190,7 +190,8 @@ credit-risk-prediction/
 │
 ├── data/
 │   ├── german.data             # Original German Credit Dataset (UCI Repository)
-│   └── german_credit_cibil.csv # Augmented dataset with calibrated CIBIL bureau scores
+│   ├── german_credit_cibil.csv # Augmented dataset with calibrated CIBIL bureau scores
+│   └── sample_batch_applicants.csv # 20-record sample batch file for portfolio evaluation
 │
 ├── notebooks/
 │   └── credit_risk_analysis.ipynb # Full EDA, preprocessing, model development & threshold analysis
@@ -200,7 +201,8 @@ credit-risk-prediction/
 │
 ├── src/
 │   ├── train.py                # Standalone reproducible training and validation pipeline
-│   └── underwriting.py         # Underwriting engine, risk-adjusted APR pricing, amortization & memo generation
+│   ├── underwriting.py         # Underwriting engine, APR pricing, amortization & covenants
+│   └── cibil_dashboard.py      # TransUnion CIBIL Speedometer gauge & 5 Credit Pillars module
 │
 ├── screenshots/
 │   ├── app_interface.png       # Guided application wizard & stepper UI screenshot
@@ -242,8 +244,8 @@ The classification rule is:
 prediction = "Bad Credit" if bad_probability >= 0.30 else "Good Credit"
 ```
 
-* **Default Probability $\ge 0.30$:** Flagged as Bad Credit / Elevated Risk.
-* **Default Probability $< 0.30$:** Approved as Good Credit / Prime Facility.
+- **Default Probability $\ge 0.30$:** Flagged as Bad Credit / Elevated Risk.
+- **Default Probability $< 0.30$:** Approved as Good Credit / Prime Facility.
 
 ---
 
@@ -254,7 +256,7 @@ The retrained model was evaluated on the untouched 200-observation holdout test 
 ### Holdout Test Benchmarks
 
 | Metric | Result | Benchmark Context |
-|---|---:|---|
+| --- | ---: | --- |
 | **Accuracy** | **77.5%** | Correctly classified 155 of 200 holdout observations |
 | **ROC-AUC** | **0.80** | Strong discrimination between good and default profiles |
 | **Good Credit Precision** | **0.83** | High accuracy among approved applicants |
@@ -291,13 +293,23 @@ The project includes an interactive web application implemented in `app.py`.
 ### Key Features
 
 - **Step-by-Step Underwriting Wizard:**
-  1. *Step 1: Loan & Financing Request:* Principal amount, duration slider (4–72 months), loan purpose, installment rate.
+  1. *Step 1: Loan & Financing Request:* Principal amount, duration slider (4–72 months), loan purpose, disposable income, and instant live FOIR debt capacity preview.
   2. *Step 2: Personal Profile & Employment:* Age slider, employment tenure, job category, marital status, dependents.
-  3. *Step 3: Assets, History & CIBIL Bureau:* **Interactive CIBIL slider (300–900)** with live rating badge, checking liquidity, savings reserves, property collateral, and existing facilities.
-  4. *Step 4: Executive Underwriting & Decision Report:* Full default scoring, risk grade, dynamic APR recommendation, max credit limit, side-by-side financing table, and covenants.
-- **TransUnion CIBIL Bureau Integration:**
-  - Automated **Bureau Knockout Alert** if CIBIL score is below **600**.
-  - Color-coded bureau rating badges: 🟢 Prime (750+), 🔵 Good (700-749), 🟡 Fair (650-699), 🟠 Poor (600-649), ⛔ Knockout (<600).
+  3. *Step 3: Assets, History & CIBIL Bureau:* **Interactive CIBIL slider (300–900)**, real-time SVG Speedometer dial preview, checking liquidity, savings reserves, property collateral, and facilities.
+  4. *Step 4: Executive Underwriting & Decision Report:* Full default scoring, risk grade, dynamic APR recommendation, max credit limit, interactive amortization schedule curve, side-by-side financing table, and covenants.
+- **TransUnion CIBIL Bureau Dashboard (cibil.com/freecibilscore style):**
+  - **Semicircular Speedometer Gauge:** Visual dial calibrated across the 300 to 900 scale with 5 color bands (Poor, Needs Work, Fair, Good, Excellent) and dynamic needle.
+  - **5 Official Credit Health Pillars:** Evaluates Payment History (35%), Credit Utilization (30%), Credit Vintage (15%), Credit Mix (10%), and Recent Inquiries (10%).
+  - **Loan Sanction Odds:** Instant sanction probability (e.g. 85-96% for 750+) and bank interest rate concessions.
+  - **Automated Bureau Knockout Alert** if CIBIL score is below **600**.
+- **Interactive Loan Amortization Payoff Curve:**
+  - Visual monthly balance reduction line chart and principal vs. interest area chart.
+  - Full month-by-month repayment ledger table with 1-click CSV download.
+- **Portfolio Batch Processor (CSV Mode):**
+  - Upload entire borrower cohorts or loan books via CSV for simultaneous ML scoring.
+  - Portfolio summary KPIs (Total Volume, Approval Rate, Average CIBIL, Total Exposure Cap).
+  - Distribution bar charts for Decisions and Risk Grades.
+  - Filterable audit table with 1-click export of scored portfolio CSV.
 - **One-Click Sidebar Presets:**
   - 🌟 **Prime (Low Risk):** CIBIL 820, substantial reserves, real estate collateral $\rightarrow$ Approved, AAA rating, 4.95% APR.
   - ⚠️ **High Risk Profile:** CIBIL 540, negative balance, critical credit history $\rightarrow$ Auto-Declined, CCC rating, Knockout.
@@ -315,38 +327,48 @@ The project includes an interactive web application implemented in `app.py`.
 - Git
 
 ### Step 1: Clone Repository
+
 ```bash
 git clone https://github.com/ahamedlabs01/credit-risk-prediction.git
 cd credit-risk-prediction
 ```
 
 ### Step 2: Create & Activate Virtual Environment
+
 - **Windows (PowerShell):**
+
   ```powershell
   python -m venv .venv
   .\.venv\Scripts\Activate.ps1
   ```
+
 - **Linux / macOS:**
+
   ```bash
   python3 -m venv .venv
   source .venv/bin/activate
   ```
 
 ### Step 3: Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### Step 4: Retrain Pipeline (Optional)
+
 To retrain the complete end-to-end model with CIBIL bureau scoring and regenerate `models/credit_risk_model.pkl`:
+
 ```bash
 python src/train.py
 ```
 
 ### Step 5: Launch the Streamlit Web Application
+
 ```powershell
 .\.venv\Scripts\streamlit run app.py
 ```
+
 Open your browser at `http://localhost:8501`.
 
 ---
@@ -354,6 +376,7 @@ Open your browser at `http://localhost:8501`.
 ## 🧪 13. Testing and Validation
 
 All system modules are covered by headless integration tests:
+
 - **ML Pipeline:** Verified feature transformations across 13 categorical and 8 numerical features.
 - **Bureau Knockout:** Tested assertions confirming `CIBIL < 600` strictly triggers auto-decline and policy alerts.
 - **Pricing & Limits:** Validated amortization mathematical formulas, risk spreads, and capacity ceilings.
@@ -372,22 +395,25 @@ All system modules are covered by headless integration tests:
 ## 📸 Project Screenshots
 
 ### 1. Application Wizard & Stepper Navigation
+
 ![Application Interface](screenshots/app_interface.png)
 
 ### 2. Credit Risk Evaluation Report & Spectrum Gauge
+
 ![Prediction Result](screenshots/prediction_result.png)
 
 ### 3. Top Predictive Credit Risk Features
+
 ![Feature Coefficients](screenshots/feature_importance.png)
 
 ---
 
 ## 📚 15. References
 
-- UCI Machine Learning Repository — German Credit Data: https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data
-- Scikit-learn Documentation: https://scikit-learn.org/
-- Streamlit Documentation: https://docs.streamlit.io/
-- TransUnion CIBIL Scoring Standards: https://www.cibil.com/
+- UCI Machine Learning Repository — German Credit Data: <https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data>
+- Scikit-learn Documentation: <https://scikit-learn.org/>
+- Streamlit Documentation: <https://docs.streamlit.io/>
+- TransUnion CIBIL Scoring Standards: <https://www.cibil.com/>
 
 ---
 

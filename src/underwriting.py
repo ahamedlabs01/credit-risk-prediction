@@ -37,6 +37,9 @@ class UnderwritingTerms:
     cibil_tier: str = "Good / Standard (700-749)"
     is_knockout: bool = False
     knockout_reason: str = ""
+    monthly_income: float = 3500.0
+    foir_percentage: float = 0.0
+    foir_status: str = "Manageable (<= 40%)"
 
 
 def get_cibil_tier_label(score: int) -> str:
@@ -75,6 +78,56 @@ def calculate_amortization(principal: float, annual_rate_pct: float, tenure_mont
         "total_interest": round(total_interest, 2),
         "total_payment": round(total_payment, 2)
     }
+
+
+def generate_amortization_schedule(
+    principal: float,
+    annual_rate_pct: float,
+    tenure_months: int
+) -> List[Dict[str, float]]:
+    """
+    Generates a month-by-month loan repayment schedule detailing:
+    - Month
+    - Beginning Balance (DM)
+    - EMI Payment (DM)
+    - Principal Paid (DM)
+    - Interest Paid (DM)
+    - Ending Balance (DM)
+    """
+    if tenure_months <= 0 or principal <= 0:
+        return []
+
+    amort = calculate_amortization(principal, annual_rate_pct, tenure_months)
+    monthly_payment = amort["monthly_payment"]
+    monthly_rate = (annual_rate_pct / 100.0) / 12.0
+
+    schedule = []
+    balance = principal
+
+    for m in range(1, tenure_months + 1):
+        interest_charge = balance * monthly_rate
+        if m == tenure_months or monthly_payment >= (balance + interest_charge):
+            principal_paid = balance
+            payment = balance + interest_charge
+            ending_balance = 0.0
+        else:
+            principal_paid = monthly_payment - interest_charge
+            payment = monthly_payment
+            ending_balance = max(0.0, balance - principal_paid)
+
+        schedule.append({
+            "Month": m,
+            "Beginning Balance": round(balance, 2),
+            "Payment (EMI)": round(payment, 2),
+            "Principal Paid": round(principal_paid, 2),
+            "Interest Paid": round(interest_charge, 2),
+            "Ending Balance": round(ending_balance, 2),
+        })
+        balance = ending_balance
+        if balance <= 0:
+            break
+
+    return schedule
 
 
 def evaluate_underwriting_terms(
@@ -251,15 +304,31 @@ def evaluate_underwriting_terms(
     rec_duration_eval = min(requested_duration, 36) if decision != "Approved" else requested_duration
     amort_rec = calculate_amortization(rec_amount_eval, recommended_apr, rec_duration_eval)
 
-    # Debt service burden label
-    if installment_rate >= 4:
-        debt_service_burden = "Heavy (4% bracket - high disposable income commitment)"
-    elif installment_rate == 3:
-        debt_service_burden = "Moderate-High (3% bracket - standard risk exposure)"
-    elif installment_rate == 2:
-        debt_service_burden = "Balanced (2% bracket - healthy repayment headroom)"
+    # Debt service burden & FOIR calculation
+    monthly_income = float(applicant.get("monthly_income", 0.0))
+    if monthly_income <= 0:
+        # Calculate derived baseline income from installment rate
+        est_income = (requested_amount / max(1, requested_duration)) / (max(1, installment_rate) * 0.01)
+        monthly_income = round(max(1500.0, min(est_income, 15000.0)), 2)
+
+    foir_percentage = round((amort_req["monthly_payment"] / max(1.0, monthly_income)) * 100.0, 1)
+    if foir_percentage <= 35.0:
+        foir_status = "Conservative (<= 35% FOIR • Low Stress)"
+    elif foir_percentage <= 50.0:
+        foir_status = "Standard (36% - 50% FOIR • Manageable)"
+    elif foir_percentage <= 65.0:
+        foir_status = "Elevated (51% - 65% FOIR • Stretched)"
     else:
-        debt_service_burden = "Conservative (1% bracket - minimal income stress)"
+        foir_status = "Critical Over-Obligation (> 65% FOIR • High Stress)"
+
+    if installment_rate >= 4:
+        debt_service_burden = f"Heavy (4% tier • {foir_percentage:.1f}% FOIR)"
+    elif installment_rate == 3:
+        debt_service_burden = f"Moderate-High (3% tier • {foir_percentage:.1f}% FOIR)"
+    elif installment_rate == 2:
+        debt_service_burden = f"Balanced (2% tier • {foir_percentage:.1f}% FOIR)"
+    else:
+        debt_service_burden = f"Conservative (1% tier • {foir_percentage:.1f}% FOIR)"
 
     # -------------------------------------------------------------------------
     # 5. Underwriting Conditions & Covenants
@@ -277,6 +346,8 @@ def evaluate_underwriting_terms(
             conditions.append("Senior underwriter countersignature required for credit facility exceeding 10,000 DM.")
         if savings in ["A61", "A65"]:
             conditions.append("Establish automated direct-debit on primary checking account for monthly installments.")
+        if foir_percentage > 50.0:
+            conditions.append(f"⚠️ Elevated FOIR ({foir_percentage:.1f}%): Monthly installment exceeds 50% of disposable income; require proof of secondary liquid reserves.")
     elif decision == "Conditionally Approved":
         if cibil_score < 680:
             conditions.append(f"CIBIL score ({cibil_score}) indicates moderate bureau history: require a creditworthy co-borrower or guarantor (CIBIL 750+).")
@@ -290,6 +361,8 @@ def evaluate_underwriting_terms(
             conditions.append("Pledge secondary collateral or vehicle title to support the loan.")
         if applicant.get("checking_account") == "A11":
             conditions.append("Overdraft clearance and 60-day positive checking balance history required prior to disbursement.")
+        if foir_percentage > 50.0:
+            conditions.append(f"⚠️ High Debt Burden (FOIR {foir_percentage:.1f}%): Lengthen tenure or curtail principal to bring debt service within 40–50% ceiling.")
     else:  # Declined
         conditions.append("Primary application declined: Default risk exceeds institution risk appetite.")
         conditions.append(f"Consider restructuring request as fully collateralized loan capped at {max_safe_credit_limit:,.0f} DM.")
@@ -316,7 +389,10 @@ def evaluate_underwriting_terms(
         cibil_score=cibil_score,
         cibil_tier=cibil_tier,
         is_knockout=is_knockout,
-        knockout_reason=knockout_reason
+        knockout_reason=knockout_reason,
+        monthly_income=monthly_income,
+        foir_percentage=foir_percentage,
+        foir_status=foir_status
     )
 
 
@@ -679,6 +755,11 @@ def generate_credit_memo_html(
             <div class="kpi-value">{bad_probability:.1%}</div>
             <div class="kpi-sub">Policy Cutoff: {threshold:.0%}</div>
         </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Debt-to-Income (FOIR)</div>
+            <div class="kpi-value">{terms.foir_percentage:.1f}%</div>
+            <div class="kpi-sub">{terms.foir_status.split('(')[0].strip()}</div>
+        </div>
     </div>
 
     <div class="section-title">Loan Structure & Cost Comparison</div>
@@ -844,7 +925,10 @@ def generate_credit_memo_json(
                 "total_interest_dm": terms.total_interest_recommended,
                 "total_payment_dm": terms.total_cost_recommended
             },
-            "debt_service_burden": terms.debt_service_burden
+            "debt_service_burden": terms.debt_service_burden,
+            "monthly_income_dm": terms.monthly_income,
+            "foir_percentage": terms.foir_percentage,
+            "foir_status": terms.foir_status
         },
         "underwriting_conditions": terms.conditions
     }

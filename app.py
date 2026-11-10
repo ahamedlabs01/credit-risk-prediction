@@ -6,8 +6,15 @@ from pathlib import Path
 
 from src.underwriting import (
     evaluate_underwriting_terms,
+    generate_amortization_schedule,
     generate_credit_memo_html,
-    generate_credit_memo_json
+    generate_credit_memo_json,
+    get_cibil_tier_label
+)
+from src.train import generate_cibil_scores
+from src.cibil_dashboard import (
+    render_cibil_dashboard_html,
+    get_cibil_band_details
 )
 
 # ==============================================================================
@@ -343,7 +350,8 @@ PRESET_PRIME = {
     "job": "A173",              # skilled employee
     "telephone": "A192",        # yes
     "foreign_worker": "A201",   # yes
-    "cibil_score": 820
+    "cibil_score": 820,
+    "monthly_income": 6500
 }
 
 PRESET_HIGH_RISK = {
@@ -367,7 +375,8 @@ PRESET_HIGH_RISK = {
     "job": "A172",              # unskilled
     "telephone": "A191",        # none
     "foreign_worker": "A201",   # yes
-    "cibil_score": 540
+    "cibil_score": 540,
+    "monthly_income": 2200
 }
 
 def apply_preset(preset_dict, run_eval=True):
@@ -412,41 +421,52 @@ def evaluate_and_store(applicant_dict):
     }
 
 # ==============================================================================
-# Sidebar: Presets, Policy Slider & Wizard Navigator
+# Sidebar: Operating Mode, Presets, Policy Slider & Wizard Navigator
 # ==============================================================================
 with st.sidebar:
-    st.markdown("### 🧭 Application Wizard")
-    st.caption("Jump directly to any section of the application:")
-    
-    col_nav1, col_nav2 = st.columns(2)
-    with col_nav1:
-        if st.button("1️⃣ Financing", use_container_width=True):
-            st.session_state.wizard_step = 1
-            st.rerun()
-        if st.button("3️⃣ Assets & Hist", use_container_width=True):
-            st.session_state.wizard_step = 3
-            st.rerun()
-    with col_nav2:
-        if st.button("2️⃣ Profile", use_container_width=True):
-            st.session_state.wizard_step = 2
-            st.rerun()
-        if st.button("4️⃣ Decision", use_container_width=True):
-            st.session_state.wizard_step = 4
-            st.rerun()
+    st.markdown("### 🎛️ Operating Mode")
+    app_mode = st.radio(
+        "Select Workflow:",
+        options=["👤 Single Applicant Wizard", "📁 Portfolio Batch Processor (CSV)"],
+        index=0,
+        key="app_mode_selection",
+        label_visibility="collapsed"
+    )
 
-    st.markdown("---")
-    st.markdown("### ⚡ Quick Presets")
-    st.write("Load sample underwriting profiles to evaluate instantly:")
-    
-    col_pre1, col_pre2 = st.columns(2)
-    with col_pre1:
-        if st.button("🌟 Prime (Low Risk)", use_container_width=True):
-            apply_preset(PRESET_PRIME)
-            st.rerun()
-    with col_pre2:
-        if st.button("⚠️ High Risk", use_container_width=True):
-            apply_preset(PRESET_HIGH_RISK)
-            st.rerun()
+    if app_mode == "👤 Single Applicant Wizard":
+        st.markdown("---")
+        st.markdown("### 🧭 Application Wizard")
+        st.caption("Jump directly to any section of the application:")
+        
+        col_nav1, col_nav2 = st.columns(2)
+        with col_nav1:
+            if st.button("1️⃣ Financing", use_container_width=True):
+                st.session_state.wizard_step = 1
+                st.rerun()
+            if st.button("3️⃣ Assets & Hist", use_container_width=True):
+                st.session_state.wizard_step = 3
+                st.rerun()
+        with col_nav2:
+            if st.button("2️⃣ Profile", use_container_width=True):
+                st.session_state.wizard_step = 2
+                st.rerun()
+            if st.button("4️⃣ Decision", use_container_width=True):
+                st.session_state.wizard_step = 4
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown("### ⚡ Quick Presets")
+        st.write("Load sample underwriting profiles to evaluate instantly:")
+        
+        col_pre1, col_pre2 = st.columns(2)
+        with col_pre1:
+            if st.button("🌟 Prime (Low Risk)", use_container_width=True):
+                apply_preset(PRESET_PRIME)
+                st.rerun()
+        with col_pre2:
+            if st.button("⚠️ High Risk", use_container_width=True):
+                apply_preset(PRESET_HIGH_RISK)
+                st.rerun()
 
     st.markdown("---")
     st.markdown("### 🎯 Decision Policy")
@@ -475,16 +495,18 @@ with st.sidebar:
     st.caption("🔒 *Educational & demonstration prototype.*")
 
 # ==============================================================================
-# Main Hero Section
+# MODE 1: Single Applicant Underwriting Wizard
 # ==============================================================================
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-title">💳 CreditIQ Underwriting Studio</div>
-    <div class="hero-subtitle">
-        Step-by-step credit evaluation workflow powered by machine learning and automated risk-adjusted loan pricing.
+if app_mode == "👤 Single Applicant Wizard":
+    # Main Hero Section
+    st.markdown("""
+    <div class="hero-container">
+        <div class="hero-title">💳 CreditIQ Underwriting Studio</div>
+        <div class="hero-subtitle">
+            Step-by-step credit evaluation workflow powered by machine learning and automated risk-adjusted loan pricing.
+        </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # Stepper Visual Progress Bar
@@ -550,7 +572,8 @@ def get_current_applicant():
         "dependents": st.session_state.get("input_dependents", 1),
         "telephone": st.session_state.get("input_telephone", "A192"),
         "foreign_worker": st.session_state.get("input_foreign_worker", "A201"),
-        "cibil_score": int(st.session_state.get("input_cibil_score", 720))
+        "cibil_score": int(st.session_state.get("input_cibil_score", 720)),
+        "monthly_income": float(st.session_state.get("input_monthly_income", 3500))
     }
 
 # ==============================================================================
@@ -561,7 +584,7 @@ if current_step == 1:
     <div class="wizard-card">
         <div class="card-header">💰 Step 1 of 4: Loan & Financing Parameters</div>
         <div class="step-tip">
-            Specify the requested facility principal, loan term maturity, loan purpose, and debt-service installment rate.
+            Specify the requested facility principal, loan term maturity, loan purpose, monthly income, and debt-service installment rate.
         </div>
     """, unsafe_allow_html=True)
 
@@ -588,6 +611,16 @@ if current_step == 1:
         )
         st.session_state["input_credit_amount"] = credit_amount
 
+        monthly_income = st.number_input(
+            "Monthly Net Disposable Income (DM)",
+            min_value=500,
+            max_value=50000,
+            value=int(st.session_state.get("input_monthly_income", 3500)),
+            step=250,
+            help="Certified monthly net income after tax used to compute debt service FOIR capacity."
+        )
+        st.session_state["input_monthly_income"] = monthly_income
+
     with col2:
         purpose_options = ["A40", "A41", "A42", "A43", "A44", "A45", "A46", "A47", "A48", "A49", "A410"]
         default_purp = st.session_state.get("input_purpose", "A40")
@@ -608,12 +641,23 @@ if current_step == 1:
         )
         st.session_state["input_installment_rate"] = installment_rate
 
-    # Quick Repayment Projection
-    est_monthly_rough = credit_amount / duration
+    # Quick Repayment & FOIR Capacity Projection
+    est_monthly_rough = credit_amount / max(1, duration)
+    live_foir = (est_monthly_rough / max(1.0, float(monthly_income))) * 100.0
+    if live_foir <= 35.0:
+        foir_tag = f"<span style='color: #34d399; font-weight: 700;'>🟢 {live_foir:.1f}% (Healthy / Low Burden)</span>"
+    elif live_foir <= 50.0:
+        foir_tag = f"<span style='color: #fbbf24; font-weight: 700;'>🟡 {live_foir:.1f}% (Manageable / Standard)</span>"
+    else:
+        foir_tag = f"<span style='color: #ef4444; font-weight: 700;'>🔴 {live_foir:.1f}% (High Obligation Burden)</span>"
+
     st.markdown(f"""
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(148, 163, 184, 0.2); border-radius: 10px; padding: 14px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="color: #94a3b8; font-size: 0.95rem;">Principal Burden: <strong>{credit_amount:,.0f} DM</strong> over <strong>{duration} months</strong></span>
-            <span style="color: #38bdf8; font-weight: 700; font-size: 1.05rem;">Estimated Base Principal: ~{est_monthly_rough:,.2f} DM/mo</span>
+        <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(148, 163, 184, 0.2); border-radius: 10px; padding: 14px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <span style="color: #94a3b8; font-size: 0.95rem;">Principal: <strong>{credit_amount:,.0f} DM</strong> over <strong>{duration} mos</strong> | Income: <strong>{monthly_income:,.0f} DM/mo</strong></span>
+            <div>
+                <span style="color: #38bdf8; font-weight: 700; font-size: 1.0rem; margin-right: 15px;">Est. Monthly Principal: ~{est_monthly_rough:,.2f} DM</span>
+                <span style="font-size: 0.95rem;">FOIR Capacity: {foir_tag}</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -753,6 +797,9 @@ elif current_step == 3:
             cibil_badge = f"<span style='background:#7f1d1d; color:#fca5a5; padding:4px 10px; border-radius:6px; font-weight:700; font-size:12px;'>⛔ Subprime / Bureau Knockout ({cibil_val})</span>"
 
         st.markdown(f"<div style='margin-top:-8px; margin-bottom:16px;'>Bureau Standing: {cibil_badge}</div>", unsafe_allow_html=True)
+
+        with st.expander("📊 View Live TransUnion CIBIL™ Speedometer & 5 Credit Pillars", expanded=False):
+            st.markdown(render_cibil_dashboard_html(cibil_val, get_current_applicant()), unsafe_allow_html=True)
 
         checking_options = ["A11", "A12", "A13", "A14"]
         def_chk = st.session_state.get("input_checking_account", "A12")
@@ -976,6 +1023,12 @@ elif current_step == 4:
         f"Probability Gauge: Current Score **{bad_probability:.1%}** | Policy Threshold **{threshold:.0%}** | Status: **{terms.decision}**"
     )
 
+    # TransUnion CIBIL Official Speedometer & Credit Health Report
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 💳 TransUnion CIBIL™ Credit Bureau Dashboard & Speedometer")
+    st.caption("Standardized credit bureau score report benchmarked on the official 300 to 900 scale, sanction odds, and 5 credit health factors.")
+    st.markdown(render_cibil_dashboard_html(terms.cibil_score, res["applicant"]), unsafe_allow_html=True)
+
     # Underwriting Terms & Pricing Recommendation
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 🏛️ Automated Loan Terms & Pricing Recommendation")
@@ -1051,12 +1104,62 @@ elif current_step == 4:
             "Underwriting Recommendation": f"{terms.total_cost_recommended:,.2f} DM"
         },
         {
+            "Loan Parameter": "Monthly Disposable Income",
+            "Requested Application": f"{terms.monthly_income:,.2f} DM",
+            "Underwriting Recommendation": f"{terms.monthly_income:,.2f} DM"
+        },
+        {
+            "Loan Parameter": "FOIR (Debt-to-Income Capacity)",
+            "Requested Application": f"{terms.foir_percentage:.1f}% ({terms.foir_status})",
+            "Underwriting Recommendation": f"{(terms.monthly_payment_recommended / max(1.0, terms.monthly_income) * 100):.1f}% (Prudent Cap)"
+        },
+        {
             "Loan Parameter": "Debt Service Ratio Assessment",
             "Requested Application": terms.debt_service_burden,
             "Underwriting Recommendation": terms.debt_service_burden
         }
     ])
     st.table(comp_df.set_index("Loan Parameter"))
+
+    # Interactive Loan Amortization Schedule & Capital Reduction Curve
+    st.markdown("#### 📉 Interactive Loan Amortization Schedule & Capital Reduction Curve")
+    st.caption("Month-by-month capital reduction, interest charges, and remaining balance projection calculated for recommended terms.")
+
+    rec_principal_eval = terms.requested_amount if terms.decision == "Approved" else min(terms.requested_amount, terms.max_safe_credit_limit)
+    rec_tenure_eval = terms.requested_duration if terms.decision == "Approved" else min(terms.requested_duration, 36)
+    
+    amort_schedule = generate_amortization_schedule(
+        principal=rec_principal_eval,
+        annual_rate_pct=terms.recommended_apr,
+        tenure_months=rec_tenure_eval
+    )
+    if amort_schedule:
+        schedule_df = pd.DataFrame(amort_schedule)
+        
+        tab_curve, tab_breakdown, tab_table = st.tabs([
+            "📉 Loan Balance Payoff Curve",
+            "📊 Monthly Principal vs Interest",
+            "📋 Full Month-by-Month Schedule"
+        ])
+        
+        with tab_curve:
+            st.line_chart(schedule_df.set_index("Month")[["Ending Balance"]], use_container_width=True)
+            st.caption(f"Trajectory of outstanding loan principal declining from {rec_principal_eval:,.0f} DM to 0 DM across {rec_tenure_eval} months maturity.")
+            
+        with tab_breakdown:
+            st.area_chart(schedule_df.set_index("Month")[["Principal Paid", "Interest Paid"]], use_container_width=True)
+            st.caption("Monthly installment composition: early installments contain higher interest charges, transitioning to higher principal reduction over time.")
+            
+        with tab_table:
+            st.dataframe(schedule_df, use_container_width=True)
+            csv_schedule = schedule_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Amortization Schedule (CSV)",
+                data=csv_schedule,
+                file_name=f"Amortization_Schedule_{terms.docket_id}.csv",
+                mime="text/csv",
+                key="btn_download_amort"
+            )
 
     # Underwriting Covenants & Pre-conditions
     st.markdown("#### 📜 Underwriting Conditions Precedent & Covenants")
@@ -1113,3 +1216,179 @@ elif current_step == 4:
                     del st.session_state[k]
             st.session_state.wizard_step = 1
             st.rerun()
+
+# ==============================================================================
+# MODE 2: Portfolio Batch Underwriting & Audit Hub
+# ==============================================================================
+else:
+    st.markdown("""
+    <div class="hero-container">
+        <div class="hero-title">📁 Portfolio Batch Underwriting & Audit Hub</div>
+        <div class="hero-subtitle">
+            Upload institutional portfolios or loan application cohorts to execute simultaneous ML default scoring, CIBIL bureau knockout evaluation, and automated underwriting terms recommendation.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_info, col_tmpl = st.columns([3, 1])
+    with col_info:
+        st.write(
+            "Upload a CSV file containing applicant records. The engine processes all 21 financial and bureau features in real time, applies active risk policies, and generates an audit docket."
+        )
+    with col_tmpl:
+        sample_path = Path("data/sample_batch_applicants.csv")
+        if sample_path.exists():
+            sample_bytes = sample_path.read_bytes()
+            st.download_button(
+                label="📄 Download Sample Batch CSV",
+                data=sample_bytes,
+                file_name="sample_credit_batch.csv",
+                mime="text/csv",
+                use_container_width=True,
+                help="Download a 20-row sample CSV with pre-configured applicants to test batch scoring immediately."
+            )
+
+    uploaded_file = st.file_uploader(
+        "Upload Applicants CSV File",
+        type=["csv"],
+        help="CSV must include borrower attributes (duration, credit_amount, checking_account, etc.)"
+    )
+
+    if uploaded_file is not None:
+        try:
+            batch_df = pd.read_csv(uploaded_file)
+            st.success(f"✅ Successfully loaded `{uploaded_file.name}` with **{len(batch_df)}** records.")
+
+            with st.spinner(f"Executing batch ML inference and underwriting evaluation for {len(batch_df)} applicants..."):
+                # If cibil_score not present, compute it automatically
+                if "cibil_score" not in batch_df.columns:
+                    batch_df["cibil_score"] = generate_cibil_scores(batch_df)
+
+                req_features = [
+                    "checking_account", "duration", "credit_history", "purpose",
+                    "credit_amount", "savings", "employment", "installment_rate",
+                    "personal_status", "other_debtors", "residence_since", "property",
+                    "age", "other_installment_plans", "housing", "existing_credits",
+                    "job", "dependents", "telephone", "foreign_worker", "cibil_score"
+                ]
+
+                missing = [f for f in req_features if f not in batch_df.columns]
+                if missing:
+                    st.error(f"❌ Uploaded CSV is missing required columns: `{', '.join(missing)}`")
+                else:
+                    X_input = batch_df[req_features]
+                    probabilities = model.predict_proba(X_input)
+                    bad_index = list(model.classes_).index(2)
+                    bad_probs = probabilities[:, bad_index]
+
+                    results = []
+                    for idx, row in batch_df.iterrows():
+                        row_dict = row.to_dict()
+                        b_prob = float(bad_probs[idx])
+                        terms = evaluate_underwriting_terms(
+                            applicant=row_dict,
+                            bad_probability=b_prob,
+                            threshold=threshold
+                        )
+                        results.append({
+                            "Docket ID": terms.docket_id,
+                            "Applicant ID": str(row_dict.get("applicant_id", f"APP-{idx+1001}")),
+                            "CIBIL Score": terms.cibil_score,
+                            "CIBIL Tier": terms.cibil_tier.split("(")[0].strip(),
+                            "Default Probability": f"{b_prob:.1%}",
+                            "Decision": terms.decision,
+                            "Risk Grade": terms.risk_grade,
+                            "Risk Tier": terms.risk_tier,
+                            "Requested Amount (DM)": terms.requested_amount,
+                            "Recommended Limit (DM)": terms.max_safe_credit_limit,
+                            "Recommended APR (%)": terms.recommended_apr,
+                            "Monthly Payment (DM)": terms.monthly_payment_recommended,
+                            "FOIR (%)": f"{terms.foir_percentage:.1f}%",
+                            "Bureau Knockout": "YES" if terms.is_knockout else "NO",
+                            "Key Covenants": "; ".join(terms.conditions[:2])
+                        })
+
+                    scored_df = pd.DataFrame(results)
+
+                    # -------------------------------------------------------------
+                    # Portfolio Summary KPI Metrics
+                    # -------------------------------------------------------------
+                    st.markdown("### 📊 Portfolio Executive Overview")
+                    k1, k2, k3, k4, k5 = st.columns(5)
+
+                    total_count = len(scored_df)
+                    approved_count = sum(scored_df["Decision"] == "Approved")
+                    cond_count = sum(scored_df["Decision"] == "Conditionally Approved")
+                    declined_count = sum(scored_df["Decision"] == "Declined")
+                    approval_rate = (approved_count + cond_count) / max(1, total_count)
+                    avg_cibil = scored_df["CIBIL Score"].mean()
+                    total_req = scored_df["Requested Amount (DM)"].sum()
+                    total_rec = scored_df["Recommended Limit (DM)"].sum()
+
+                    with k1:
+                        st.metric("Total Applicants", f"{total_count:,}")
+                    with k2:
+                        st.metric("Approval Rate", f"{approval_rate:.1%}", f"{approved_count} Appr | {cond_count} Cond")
+                    with k3:
+                        st.metric("Average CIBIL", f"{avg_cibil:.0f}")
+                    with k4:
+                        st.metric("Total Requested", f"{total_req:,.0f} DM")
+                    with k5:
+                        st.metric("Recommended Cap", f"{total_rec:,.0f} DM", delta=f"{total_rec - total_req:+,.0f} DM")
+
+                    # -------------------------------------------------------------
+                    # Portfolio Distribution Charts
+                    # -------------------------------------------------------------
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    ch_col1, ch_col2 = st.columns(2)
+                    with ch_col1:
+                        st.markdown("##### Underwriting Decision Distribution")
+                        decision_counts = scored_df["Decision"].value_counts()
+                        st.bar_chart(decision_counts)
+
+                    with ch_col2:
+                        st.markdown("##### Credit Risk Rating Breakdown")
+                        grade_counts = scored_df["Risk Grade"].value_counts().reindex(
+                            ["AAA", "AA", "A", "BBB", "BB", "B", "CCC"], fill_value=0
+                        )
+                        st.bar_chart(grade_counts)
+
+                    # -------------------------------------------------------------
+                    # Filterable Ledger Table & Export
+                    # -------------------------------------------------------------
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("### 📋 Filterable Portfolio Underwriting Ledger")
+
+                    fil_col1, fil_col2 = st.columns([1, 2])
+                    with fil_col1:
+                        decision_filter = st.selectbox(
+                            "Filter by Decision Status",
+                            options=["All", "Approved", "Conditionally Approved", "Declined"],
+                            index=0
+                        )
+                    with fil_col2:
+                        search_query = st.text_input("Search by Applicant ID or Docket ID", "")
+
+                    filtered_df = scored_df.copy()
+                    if decision_filter != "All":
+                        filtered_df = filtered_df[filtered_df["Decision"] == decision_filter]
+                    if search_query.strip():
+                        q = search_query.strip().lower()
+                        filtered_df = filtered_df[
+                            filtered_df["Docket ID"].str.lower().str.contains(q) |
+                            filtered_df["Applicant ID"].str.lower().str.contains(q)
+                        ]
+
+                    st.dataframe(filtered_df, use_container_width=True)
+
+                    # Download Scored CSV
+                    csv_export = scored_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Complete Scored Portfolio (CSV)",
+                        data=csv_export,
+                        file_name="credit_portfolio_scored_audit.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+        except Exception as e:
+            st.error(f"❌ Error processing batch file: {e}")
